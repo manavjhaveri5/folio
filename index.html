@@ -2,7 +2,14 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Folio" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#18160f" />
+<link rel="manifest" href="/manifest.json" />
+<link rel="apple-touch-icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'><rect width='180' height='180' rx='40' fill='%232c2117'/><text x='90' y='128' font-size='105' text-anchor='middle' fill='%23b48a4f' font-family='serif'>ƒ</text></svg>" />
 <title>Folio — a reading room for PDFs</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Literata:ital,opsz,wght@0,7..72,400;0,7..72,500;0,7..72,600;1,7..72,400&family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -22,16 +29,18 @@
     --r: 3px;
     --page-filter: none;
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
   html, body {
     margin: 0; padding: 0; height: 100%;
     font-family: 'Inter', sans-serif;
     background: var(--ink);
     overflow: hidden;
+    overscroll-behavior: none;
+    touch-action: pan-y;
   }
   #app {
     position: relative;
-    width: 100%; height: 100vh;
+    width: 100%; height: 100vh; height: 100dvh;
     background:
       radial-gradient(ellipse 120% 80% at 50% -10%, #2a2419 0%, transparent 60%),
       linear-gradient(180deg, #100e0a 0%, #18160f 50%, #0e0c08 100%);
@@ -108,17 +117,18 @@
   #chrome-bottom { background: linear-gradient(0deg, rgba(16,14,10,0.92), rgba(16,14,10,0.0)); }
   #app.chrome-visible #chrome-top,
   #app.chrome-visible #chrome-bottom { opacity: 1; pointer-events: auto; }
-  #chrome-top { height: 56px; justify-content: space-between; position: absolute; top: 0; left: 0; right: 0; }
-  #chrome-bottom { height: 78px; position: absolute; bottom: 0; left: 0; right: 0; flex-direction: column; gap: 6px; justify-content: center; }
+  #chrome-top { height: calc(56px + env(safe-area-inset-top)); padding-top: env(safe-area-inset-top); justify-content: space-between; position: absolute; top: 0; left: 0; right: 0; }
+  #chrome-bottom { height: calc(78px + env(safe-area-inset-bottom)); padding-bottom: calc(8px + env(safe-area-inset-bottom)); position: absolute; bottom: 0; left: 0; right: 0; flex-direction: column; gap: 6px; justify-content: center; }
 
   #book-title { font-family: 'Fraunces', serif; font-size: 14px; color: var(--chrome-text-dim); letter-spacing: 0.01em; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
   .chrome-btns { display: flex; gap: 4px; align-items: center; }
   .icon-btn {
     background: transparent; border: none; color: var(--chrome-text-dim);
-    width: 34px; height: 34px; border-radius: 50%;
+    width: 40px; height: 40px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; cursor: pointer;
     transition: background 0.15s, color 0.15s;
+    touch-action: manipulation;
   }
   .icon-btn:hover { background: rgba(180,138,79,0.18); color: var(--brass-bright); }
   .icon-btn.active { color: var(--brass-bright); background: rgba(180,138,79,0.15); }
@@ -126,12 +136,17 @@
 
   /* ---------- Progress thread (signature element) ---------- */
   #progress-thread {
-    position: relative; width: min(560px, 90%); height: 3px;
-    background: rgba(180,138,79,0.2); border-radius: 2px; cursor: pointer;
+    position: relative; width: min(560px, 90%); height: 28px;
+    display: flex; align-items: center;
+    cursor: pointer; touch-action: manipulation;
   }
-  #progress-fill { position: absolute; left:0; top:0; bottom:0; background: linear-gradient(90deg, var(--moss), var(--brass-bright)); border-radius: 2px; width: 0%; }
+  #progress-thread::before {
+    content: ""; position: absolute; left: 0; right: 0; top: 50%; height: 3px; transform: translateY(-50%);
+    background: rgba(180,138,79,0.2); border-radius: 2px;
+  }
+  #progress-fill { position: absolute; left:0; top: 50%; transform: translateY(-50%); height: 3px; background: linear-gradient(90deg, var(--moss), var(--brass-bright)); border-radius: 2px; width: 0%; }
   #progress-handle {
-    position: absolute; top: 50%; width: 11px; height: 11px; border-radius: 50%;
+    position: absolute; top: 50%; width: 14px; height: 14px; border-radius: 50%;
     background: var(--brass-bright); transform: translate(-50%, -50%);
     box-shadow: 0 0 0 4px rgba(216,175,113,0.18);
     left: 0%;
@@ -142,7 +157,7 @@
   /* ---------- Stage ---------- */
   #book-stage { width: 100%; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; }
 
-  #page-viewport { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; perspective: 2400px; }
+  #page-viewport { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; perspective: 2400px; touch-action: pan-y manipulation; }
 
   .leaf-wrap {
     position: relative;
@@ -176,6 +191,61 @@
   #scroll-container .scroll-page { margin: 0 auto 18px; background: var(--paper); box-shadow: 0 18px 44px var(--paper-shadow); border-radius: 2px; }
   #scroll-container .scroll-page canvas { display: block; border-radius: 2px; }
 
+  /* ---------- Reflow (true ebook text) mode ---------- */
+  #reflow-container {
+    width: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    background: var(--paper); scroll-behavior: smooth;
+    padding: 56px 0 110px;
+  }
+  .reflow-page {
+    max-width: var(--reflow-width, 620px); margin: 0 auto; padding: 0 26px 40px;
+  }
+  .reflow-page p {
+    font-family: 'Literata', serif; font-size: var(--reflow-font, 19px); line-height: 1.72;
+    color: var(--paper-text); margin: 0 0 1.1em; text-align: left; hyphens: auto;
+  }
+  .reflow-page .reflow-skeleton { opacity: 0.28; font-style: italic; font-family: 'Literata', serif; font-size: var(--reflow-font, 19px); color: var(--paper-text); padding: 10px 0; }
+  .reflow-page .reflow-empty { opacity: 0.5; font-style: italic; font-family: 'Inter', sans-serif; font-size: 13px; color: var(--paper-text); }
+  .reflow-divider { max-width: var(--reflow-width, 620px); margin: 0 auto; padding: 0 26px; display: flex; align-items: center; gap: 10px; opacity: 0.35; }
+  .reflow-divider::before, .reflow-divider::after { content: ""; flex: 1; height: 1px; background: var(--paper-text); }
+  .reflow-divider span { font-family: 'Inter', sans-serif; font-size: 10px; letter-spacing: 0.1em; color: var(--paper-text); }
+  [data-theme="night"] #reflow-container { background: #15140f; }
+  [data-theme="night"] .reflow-page p, [data-theme="night"] .reflow-page .reflow-skeleton { color: #cfc6b3; }
+  [data-theme="night"] .reflow-divider::before, [data-theme="night"] .reflow-divider::after, [data-theme="night"] .reflow-divider span { background: #cfc6b3; color: #cfc6b3; }
+  [data-theme="sepia"] #reflow-container { background: #ecdfc2; }
+  [data-theme="sepia"] .reflow-page p, [data-theme="sepia"] .reflow-page .reflow-skeleton { color: #3a2c18; }
+  [data-theme="sepia"] .reflow-divider::before, [data-theme="sepia"] .reflow-divider::after, [data-theme="sepia"] .reflow-divider span { background: #3a2c18; color: #3a2c18; }
+
+  .reflow-page p.speaking {
+    background: rgba(180,138,79,0.18); border-radius: 4px;
+    box-shadow: 0 0 0 8px rgba(180,138,79,0.18);
+    transition: background 0.25s, box-shadow 0.25s;
+  }
+
+  #listen-bar {
+    position: absolute; left: 50%; bottom: calc(96px + env(safe-area-inset-bottom));
+    transform: translateX(-50%);
+    background: rgba(15,13,9,0.96); border: 1px solid rgba(180,138,79,0.3);
+    border-radius: 26px; padding: 5px 8px; display: flex; align-items: center; gap: 2px;
+    z-index: 45; box-shadow: 0 14px 34px rgba(0,0,0,0.45);
+  }
+  #listen-bar[hidden] { display: none; }
+  #listen-bar .icon-btn { width: 36px; height: 36px; }
+  #listen-bar select {
+    background: transparent; color: var(--chrome-text-dim); border: 1px solid rgba(180,138,79,0.25);
+    border-radius: 14px; font-size: 11px; padding: 5px 6px; max-width: 108px; margin: 0 2px;
+    font-family: 'Inter', sans-serif;
+  }
+  #listen-bar select option { background: #15140f; color: var(--chrome-text); }
+  #listen-bar #listen-speed {
+    background: transparent; border: 1px solid rgba(180,138,79,0.25); color: var(--chrome-text-dim);
+    border-radius: 14px; font-size: 11.5px; padding: 6px 10px; cursor: pointer; font-family: 'Inter', sans-serif;
+  }
+  #listen-bar #listen-speed:hover { color: var(--brass-bright); border-color: var(--brass); }
+  @media (max-width: 420px) {
+    #listen-bar select { max-width: 70px; }
+  }
+
   [data-theme="night"] .leaf-wrap canvas, [data-theme="night"] .scroll-page canvas { filter: invert(0.93) hue-rotate(180deg) contrast(0.92); }
   [data-theme="night"] .leaf-wrap, [data-theme="night"] .scroll-page { background: #15140f; box-shadow: 0 26px 60px rgba(0,0,0,0.6); }
   [data-theme="sepia"] .leaf-wrap canvas, [data-theme="sepia"] .scroll-page canvas { filter: sepia(0.42) saturate(1.05) brightness(0.97); }
@@ -186,7 +256,8 @@
     position: absolute; top: 0; bottom: 0; left: 0; width: 300px;
     background: rgba(18,15,10,0.97); border-right: 1px solid rgba(180,138,79,0.18);
     z-index: 40; transform: translateX(-100%); transition: transform 0.3s ease;
-    display: flex; flex-direction: column; padding: 60px 0 20px;
+    display: flex; flex-direction: column;
+    padding: calc(60px + env(safe-area-inset-top)) 0 calc(20px + env(safe-area-inset-bottom));
     backdrop-filter: blur(6px);
   }
   #drawer.open { transform: translateX(0); }
@@ -265,6 +336,12 @@
         <button class="icon-btn" id="btn-scroll" title="Toggle scroll mode">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="5" y="3" width="14" height="18" rx="1.5"/><path d="M9 8h6M9 12h6M9 16h4"/></svg>
         </button>
+        <button class="icon-btn" id="btn-reflow" title="Reflow as text (easier on phones)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 11h16M4 16h10"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-listen" title="Listen (text-to-speech)">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 14v-2a8 8 0 0116 0v2"/><rect x="2.5" y="13" width="4" height="7" rx="1.5"/><rect x="17.5" y="13" width="4" height="7" rx="1.5"/></svg>
+        </button>
         <button class="icon-btn" id="btn-zoom" title="Zoom">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
         </button>
@@ -288,6 +365,7 @@
           <div class="leaf right"><div class="leaf-wrap"><canvas id="canvas-right"></canvas></div></div>
         </div>
         <div id="scroll-container" hidden></div>
+        <div id="reflow-container" hidden></div>
       </div>
     </div>
 
@@ -297,6 +375,23 @@
         <div id="progress-handle"></div>
       </div>
       <div id="page-indicator">Page <b id="pi-current">1</b> of <b id="pi-total">1</b> · <span id="pi-pct">0%</span> read</div>
+    </div>
+
+    <div id="listen-bar" hidden>
+      <button class="icon-btn" id="listen-skip-back" title="Previous paragraph">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 6h2v12H6zM20 6L10 12l10 6V6z"/></svg>
+      </button>
+      <button class="icon-btn" id="listen-playpause" title="Play / Pause">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7V5z"/></svg>
+      </button>
+      <button class="icon-btn" id="listen-skip-fwd" title="Next paragraph">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M18 6h-2v12h2zM4 6l10 6-10 6V6z"/></svg>
+      </button>
+      <select id="listen-voice" title="Voice"></select>
+      <button id="listen-speed" title="Speed">1x</button>
+      <button class="icon-btn" id="listen-close" title="Stop listening">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
     </div>
 
     <div id="zoom-pop">
@@ -344,6 +439,7 @@ const els = {
   leafLeft: document.querySelector('#spread .leaf.left .leaf-wrap'),
   leafRight: document.querySelector('#spread .leaf.right .leaf-wrap'),
   scrollContainer: document.getElementById('scroll-container'),
+  reflowContainer: document.getElementById('reflow-container'),
   progressThread: document.getElementById('progress-thread'),
   progressFill: document.getElementById('progress-fill'),
   progressHandle: document.getElementById('progress-handle'),
@@ -357,6 +453,9 @@ const els = {
   btnDrawer: document.getElementById('btn-drawer'),
   btnSpread: document.getElementById('btn-spread'),
   btnScroll: document.getElementById('btn-scroll'),
+  btnReflow: document.getElementById('btn-reflow'),
+  btnListen: document.getElementById('btn-listen'),
+  listenBar: document.getElementById('listen-bar'),
   btnZoom: document.getElementById('btn-zoom'),
   btnTheme: document.getElementById('btn-theme'),
   btnFullscreen: document.getElementById('btn-fullscreen'),
@@ -371,8 +470,12 @@ let state = {
   currentPage: 1,
   scale: 1,
   zoomMode: 'fit-width', // fit-width | fit-page | custom
-  mode: 'page',          // page | scroll
+  mode: 'page',          // page | scroll | reflow
   spreadOn: true,
+  reflowFontSize: 19,
+  reflowWidth: 620,
+  listening: false,
+  speechRate: parseFloat(localStorage.getItem('folio:speechRate')) || 1,
   theme: 'day',           // day | sepia | night
   rendering: false,
 };
@@ -408,7 +511,8 @@ async function saveProgress() {
   if (!state.bookId) return;
   try {
     localStorage.setItem('folio:book:' + state.bookId, JSON.stringify({
-      page: state.currentPage, theme: state.theme, mode: state.mode, spreadOn: state.spreadOn, zoomMode: state.zoomMode
+      page: state.currentPage, theme: state.theme, mode: state.mode, spreadOn: state.spreadOn,
+      zoomMode: state.zoomMode, reflowFontSize: state.reflowFontSize, reflowWidth: state.reflowWidth
     }));
   } catch (e) {}
   await upsertLibraryEntry({
@@ -492,22 +596,27 @@ async function openFile(file) {
     state.scale = 1;
     state.zoomMode = 'fit-width';
     state.theme = 'day';
-    state.mode = 'page';
+    state.mode = window.innerWidth < 700 ? 'reflow' : 'page';
     state.spreadOn = window.innerWidth > 900;
+    state.reflowFontSize = 19;
+    state.reflowWidth = window.innerWidth < 700 ? Math.min(window.innerWidth - 40, 620) : 620;
 
     const saved = await loadProgress(id);
     if (saved) {
       state.currentPage = Math.min(saved.page || 1, state.totalPages);
       state.theme = saved.theme || 'day';
-      state.mode = saved.mode || 'page';
+      state.mode = saved.mode || state.mode;
       state.spreadOn = saved.spreadOn ?? state.spreadOn;
       state.zoomMode = saved.zoomMode || 'fit-width';
+      state.reflowFontSize = saved.reflowFontSize || state.reflowFontSize;
+      state.reflowWidth = saved.reflowWidth || state.reflowWidth;
     }
 
     els.emptyState.style.display = 'none';
     els.book.hidden = false;
     els.bookTitle.textContent = state.fileName;
     document.documentElement.setAttribute('data-theme', state.theme);
+    applyReflowStyleVars();
     applyModeUI();
     await buildToc();
     await renderCurrent();
@@ -536,7 +645,7 @@ async function renderToCanvas(canvas, pageNum, scaleOverride) {
   const page = await state.pdfDoc.getPage(pageNum);
   const scale = scaleOverride || await getFitScale(pageNum, state.zoomMode === 'custom' ? null : state.zoomMode) * (state.zoomMode === 'custom' ? state.scale : 1);
   const finalScale = state.zoomMode === 'custom' ? (await getFitScale(pageNum, 'fit-width')) * state.scale : scale;
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
   const viewport = page.getViewport({ scale: finalScale * dpr });
   canvas.width = viewport.width;
   canvas.height = viewport.height;
@@ -558,11 +667,66 @@ async function renderCurrent() {
     } else if (state.spreadOn) {
       els.leafRight.style.visibility = 'hidden';
     }
+  } else if (state.mode === 'reflow') {
+    await renderReflowMode();
   } else {
     await renderScrollMode();
   }
   updateProgressUI();
   state.rendering = false;
+}
+
+function applyReflowStyleVars() {
+  els.reflowContainer.style.setProperty('--reflow-font', state.reflowFontSize + 'px');
+  els.reflowContainer.style.setProperty('--reflow-width', state.reflowWidth + 'px');
+}
+
+async function extractParagraphs(pageNum) {
+  try {
+    const page = await state.pdfDoc.getPage(pageNum);
+    const content = await page.getTextContent();
+    const items = content.items.filter(it => it.str && it.str.length);
+    if (!items.length) return [];
+    const lines = [];
+    let cur = null;
+    for (const it of items) {
+      const y = Math.round(it.transform[5]);
+      if (!cur || Math.abs(cur.y - y) > 2.5) {
+        cur = { y, x: it.transform[4], text: it.str };
+        lines.push(cur);
+      } else {
+        cur.text += it.str;
+      }
+    }
+    lines.sort((a, b) => b.y - a.y);
+    const gaps = [];
+    for (let i = 1; i < lines.length; i++) gaps.push(lines[i - 1].y - lines[i].y);
+    const sorted = [...gaps].filter(g => g > 0).sort((a, b) => a - b);
+    const medianGap = sorted.length ? sorted[Math.floor(sorted.length / 2)] : 14;
+    const baseX = lines.length ? lines[0].x : 0;
+    const paras = [];
+    let buf = '';
+    for (let i = 0; i < lines.length; i++) {
+      const t = lines[i].text.replace(/\s+/g, ' ').trim();
+      if (!t) continue;
+      if (i > 0 && buf) {
+        const gap = lines[i - 1].y - lines[i].y;
+        const indented = lines[i].x - baseX > 9;
+        const endsSentence = /[.!?]["')\u201d]?$/.test(buf.trim());
+        if (gap > medianGap * 1.55 || (indented && endsSentence)) {
+          paras.push(buf.trim());
+          buf = '';
+        }
+      }
+      if (/[a-z]-$/.test(buf) && /^[a-z]/.test(t)) {
+        buf = buf.slice(0, -1) + t;
+      } else {
+        buf += (buf ? ' ' : '') + t;
+      }
+    }
+    if (buf.trim()) paras.push(buf.trim());
+    return paras;
+  } catch (e) { return []; }
 }
 
 async function renderScrollMode() {
@@ -586,7 +750,7 @@ async function renderScrollMode() {
           state.pdfDoc.getPage(p).then(page => {
             const base = page.getViewport({ scale: 1 });
             const scale = (vw / base.width) * (state.zoomMode === 'custom' ? state.scale : 1);
-            const dpr = window.devicePixelRatio || 1;
+            const dpr = Math.min(window.devicePixelRatio || 1, 2);
             const viewport = page.getViewport({ scale: scale * dpr });
             const canvas = en.target.querySelector('canvas');
             canvas.width = viewport.width; canvas.height = viewport.height;
@@ -607,6 +771,187 @@ async function renderScrollMode() {
   if (targetPage) targetPage.scrollIntoView();
 }
 
+async function renderReflowMode() {
+  applyReflowStyleVars();
+  if (els.reflowContainer.dataset.built === String(state.bookId)) return;
+  els.reflowContainer.innerHTML = '';
+  els.reflowContainer.dataset.built = String(state.bookId);
+  for (let i = 1; i <= state.totalPages; i++) {
+    const wrap = document.createElement('div');
+    wrap.className = 'reflow-page';
+    wrap.dataset.page = i;
+    wrap.innerHTML = '<div class="reflow-skeleton">···</div>';
+    els.reflowContainer.appendChild(wrap);
+  }
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(en => {
+      const p = Number(en.target.dataset.page);
+      if (en.isIntersecting) {
+        if (!en.target.dataset.rendered) {
+          en.target.dataset.rendered = '1';
+          extractParagraphs(p).then(paras => {
+            en.target.innerHTML = paras.length
+              ? paras.map(t => `<p>${escapeHtml(t)}</p>`).join('')
+              : '<p class="reflow-empty">No selectable text on this page (likely a scan or image) — switch to Page view to see it.</p>';
+          });
+        }
+        state.currentPage = p;
+        updateProgressUI();
+      }
+    });
+  }, { root: els.reflowContainer, threshold: 0.35 });
+  [...els.reflowContainer.children].forEach(c => observer.observe(c));
+
+  const target = els.reflowContainer.children[state.currentPage - 1];
+  if (target) target.scrollIntoView();
+}
+
+// ---------------- Listen (text-to-speech) ----------------
+let synthVoices = [];
+let currentUtterance = null;
+let listenPageParas = [];
+let listenParaIdx = 0;
+let listenPageNum = null;
+const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
+
+function loadVoices() {
+  if (!('speechSynthesis' in window)) return;
+  synthVoices = window.speechSynthesis.getVoices();
+  const sel = document.getElementById('listen-voice');
+  if (!sel || !synthVoices.length) return;
+  const prevValue = sel.value;
+  sel.innerHTML = '';
+  const sorted = [...synthVoices].sort((a, b) => (b.lang.startsWith('en') - a.lang.startsWith('en')) || a.name.localeCompare(b.name));
+  sorted.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v.voiceURI;
+    opt.textContent = v.name.replace(/^Microsoft |^Google /, '') + ' · ' + v.lang;
+    sel.appendChild(opt);
+  });
+  const saved = localStorage.getItem('folio:voiceURI');
+  if (saved && sorted.some(v => v.voiceURI === saved)) sel.value = saved;
+  else if (prevValue && sorted.some(v => v.voiceURI === prevValue)) sel.value = prevValue;
+}
+if ('speechSynthesis' in window) {
+  window.speechSynthesis.onvoiceschanged = loadVoices;
+  loadVoices();
+}
+
+async function ensureReflowPageRendered(pageNum) {
+  if (els.reflowContainer.dataset.built !== String(state.bookId)) await renderReflowMode();
+  const wrap = els.reflowContainer.children[pageNum - 1];
+  if (!wrap) return null;
+  if (!wrap.dataset.rendered) {
+    wrap.dataset.rendered = '1';
+    const paras = await extractParagraphs(pageNum);
+    wrap.innerHTML = paras.length
+      ? paras.map(t => `<p>${escapeHtml(t)}</p>`).join('')
+      : '<p class="reflow-empty">No selectable text on this page.</p>';
+  }
+  return wrap;
+}
+
+function updateListenPlayIcon() {
+  const btn = document.getElementById('listen-playpause');
+  if (!btn) return;
+  const playing = state.listening && !window.speechSynthesis.paused && window.speechSynthesis.speaking;
+  btn.innerHTML = playing
+    ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7V5z"/></svg>';
+}
+
+function stopListening() {
+  const wasListening = state.listening;
+  state.listening = false;
+  if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; currentUtterance = null; }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
+  if (els.listenBar) els.listenBar.hidden = true;
+  if (els.btnListen) els.btnListen.classList.remove('active');
+  if (wasListening) updateListenPlayIcon();
+}
+
+function speakParagraph() {
+  if (!state.listening) return;
+  if (listenParaIdx >= listenPageParas.length) {
+    if (listenPageNum < state.totalPages) {
+      goToPage(listenPageNum + 1, false);
+      speakPage(listenPageNum + 1, 0);
+    } else {
+      showToast('Finished the book.');
+      stopListening();
+    }
+    return;
+  }
+  document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
+  const p = listenPageParas[listenParaIdx];
+  p.classList.add('speaking');
+  p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  const utter = new SpeechSynthesisUtterance(p.textContent);
+  utter.rate = state.speechRate;
+  const sel = document.getElementById('listen-voice');
+  if (sel && sel.value) {
+    const v = synthVoices.find(v => v.voiceURI === sel.value);
+    if (v) utter.voice = v;
+  }
+  utter.onend = () => { if (!state.listening) return; listenParaIdx++; speakParagraph(); };
+  utter.onerror = () => { if (!state.listening) return; listenParaIdx++; speakParagraph(); };
+  currentUtterance = utter;
+  window.speechSynthesis.speak(utter);
+  updateListenPlayIcon();
+}
+
+async function speakPage(pageNum, startIdx) {
+  const wrap = await ensureReflowPageRendered(pageNum);
+  if (!wrap || !state.listening) return;
+  const paras = [...wrap.querySelectorAll('p')].filter(p => !p.classList.contains('reflow-empty'));
+  listenPageParas = paras; listenPageNum = pageNum; listenParaIdx = startIdx || 0;
+  if (!paras.length) {
+    if (pageNum < state.totalPages && state.listening) { goToPage(pageNum + 1, false); speakPage(pageNum + 1, 0); }
+    else stopListening();
+    return;
+  }
+  speakParagraph();
+}
+
+async function startListening() {
+  if (!('speechSynthesis' in window)) { showToast('Text-to-speech isn\'t supported in this browser.'); return; }
+  if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); }
+  els.listenBar.hidden = false;
+  els.btnListen.classList.add('active');
+  state.listening = true;
+  await speakPage(state.currentPage, 0);
+}
+
+function togglePlayPause() {
+  if (!state.listening) { startListening(); return; }
+  if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) window.speechSynthesis.pause();
+  else if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  setTimeout(updateListenPlayIcon, 60);
+}
+
+function skipParagraph(delta) {
+  if (!state.listening) return;
+  if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; }
+  window.speechSynthesis.cancel();
+  listenParaIdx = Math.max(0, listenParaIdx + delta);
+  speakParagraph();
+}
+
+els.btnListen.addEventListener('click', () => { state.listening ? stopListening() : startListening(); });
+document.getElementById('listen-playpause').addEventListener('click', togglePlayPause);
+document.getElementById('listen-skip-back').addEventListener('click', () => skipParagraph(-1));
+document.getElementById('listen-skip-fwd').addEventListener('click', () => skipParagraph(1));
+document.getElementById('listen-close').addEventListener('click', stopListening);
+document.getElementById('listen-voice').addEventListener('change', (e) => localStorage.setItem('folio:voiceURI', e.target.value));
+document.getElementById('listen-speed').addEventListener('click', () => {
+  const idx = (SPEEDS.indexOf(state.speechRate) + 1) % SPEEDS.length;
+  state.speechRate = SPEEDS[idx];
+  document.getElementById('listen-speed').textContent = state.speechRate + 'x';
+  localStorage.setItem('folio:speechRate', state.speechRate);
+});
+document.getElementById('listen-speed').textContent = state.speechRate + 'x';
+
 function updateProgressUI() {
   els.piCurrent.textContent = state.currentPage;
   els.piTotal.textContent = state.totalPages;
@@ -625,8 +970,9 @@ async function goToPage(num, animate) {
   const forward = num > state.currentPage;
   state.currentPage = num;
 
-  if (state.mode === 'scroll') {
-    const target = els.scrollContainer.children[num - 1];
+  if (state.mode === 'scroll' || state.mode === 'reflow') {
+    const container = state.mode === 'scroll' ? els.scrollContainer : els.reflowContainer;
+    const target = container.children[num - 1];
     if (target) target.scrollIntoView({ behavior: 'smooth' });
     updateProgressUI();
     return;
@@ -696,8 +1042,11 @@ async function renderOutlineLevel(items) {
 function applyModeUI() {
   els.btnSpread.classList.toggle('active', state.spreadOn && state.mode === 'page');
   els.btnScroll.classList.toggle('active', state.mode === 'scroll');
-  document.getElementById('page-viewport').querySelector('#spread').hidden = state.mode === 'scroll';
+  els.btnReflow.classList.toggle('active', state.mode === 'reflow');
+  document.getElementById('page-viewport').querySelector('#spread').hidden = state.mode !== 'page';
   els.scrollContainer.hidden = state.mode !== 'scroll';
+  els.reflowContainer.hidden = state.mode !== 'reflow';
+  stopListening();
 }
 
 els.btnSpread.addEventListener('click', () => {
@@ -710,6 +1059,14 @@ els.btnScroll.addEventListener('click', () => {
   applyModeUI();
   if (state.mode === 'scroll') { els.scrollContainer.dataset.built = ''; renderScrollMode(); }
   else renderCurrent();
+  saveProgress();
+});
+els.btnReflow.addEventListener('click', () => {
+  state.mode = state.mode === 'reflow' ? 'page' : 'reflow';
+  applyModeUI();
+  if (state.mode === 'reflow') { els.reflowContainer.dataset.built = ''; renderReflowMode(); }
+  else renderCurrent();
+  saveProgress();
 });
 els.btnTheme.addEventListener('click', () => {
   const i = (THEMES.indexOf(state.theme) + 1) % THEMES.length;
@@ -718,10 +1075,20 @@ els.btnTheme.addEventListener('click', () => {
   showToast('Theme: ' + state.theme[0].toUpperCase() + state.theme.slice(1));
   saveProgress();
 });
-els.btnFullscreen.addEventListener('click', () => {
-  if (!document.fullscreenElement) els.app.requestFullscreen?.();
-  else document.exitFullscreen?.();
-});
+const isIOS = /iP(hone|ad|od)/.test(navigator.platform) || (navigator.userAgent.includes('Mac') && 'ontouchend' in document);
+const isStandalone = window.navigator.standalone === true;
+if (isIOS && !document.fullscreenEnabled) {
+  els.btnFullscreen.title = isStandalone ? 'Already full screen' : 'Add to Home Screen for full screen';
+  els.btnFullscreen.addEventListener('click', () => {
+    if (isStandalone) return;
+    showToast('Tap Share → Add to Home Screen for an edge-to-edge view');
+  });
+} else {
+  els.btnFullscreen.addEventListener('click', () => {
+    if (!document.fullscreenElement) els.app.requestFullscreen?.();
+    else document.exitFullscreen?.();
+  });
+}
 els.btnDrawer.addEventListener('click', async () => { els.drawer.classList.toggle('open'); await renderLibraryLists(); });
 document.addEventListener('click', (e) => {
   if (els.drawer.classList.contains('open') && !els.drawer.contains(e.target) && e.target !== els.btnDrawer && !els.btnDrawer.contains(e.target)) {
@@ -731,11 +1098,33 @@ document.addEventListener('click', (e) => {
     els.zoomPop.classList.remove('open');
   }
 });
-els.btnZoom.addEventListener('click', () => els.zoomPop.classList.toggle('open'));
-document.getElementById('zoom-in').addEventListener('click', () => { state.zoomMode = 'custom'; state.scale = Math.min((state.scale||1) + 0.1, 3); els.zoomVal.textContent = Math.round(state.scale*100)+'%'; renderCurrent(); });
-document.getElementById('zoom-out').addEventListener('click', () => { state.zoomMode = 'custom'; state.scale = Math.max((state.scale||1) - 0.1, 0.4); els.zoomVal.textContent = Math.round(state.scale*100)+'%'; renderCurrent(); });
-document.getElementById('zoom-fit-width').addEventListener('click', () => { state.zoomMode = 'fit-width'; state.scale = 1; els.zoomVal.textContent = '100%'; renderCurrent(); });
-document.getElementById('zoom-fit-page').addEventListener('click', () => { state.zoomMode = 'fit-page'; state.scale = 1; els.zoomVal.textContent = '100%'; renderCurrent(); });
+els.btnZoom.addEventListener('click', () => { els.zoomPop.classList.toggle('open'); updateZoomPopLabels(); });
+function updateZoomPopLabels() {
+  const reflow = state.mode === 'reflow';
+  document.getElementById('zoom-fit-width').textContent = reflow ? 'Narrow column' : 'Fit width';
+  document.getElementById('zoom-fit-page').textContent = reflow ? 'Wide column' : 'Fit page';
+  els.zoomVal.textContent = reflow ? (state.reflowFontSize + 'px') : (state.zoomMode === 'custom' ? Math.round((state.scale || 1) * 100) + '%' : '100%');
+}
+document.getElementById('zoom-in').addEventListener('click', () => {
+  if (state.mode === 'reflow') { state.reflowFontSize = Math.min(state.reflowFontSize + 1, 28); applyReflowStyleVars(); saveProgress(); }
+  else { state.zoomMode = 'custom'; state.scale = Math.min((state.scale||1) + 0.1, 3); renderCurrent(); }
+  updateZoomPopLabels();
+});
+document.getElementById('zoom-out').addEventListener('click', () => {
+  if (state.mode === 'reflow') { state.reflowFontSize = Math.max(state.reflowFontSize - 1, 14); applyReflowStyleVars(); saveProgress(); }
+  else { state.zoomMode = 'custom'; state.scale = Math.max((state.scale||1) - 0.1, 0.4); renderCurrent(); }
+  updateZoomPopLabels();
+});
+document.getElementById('zoom-fit-width').addEventListener('click', () => {
+  if (state.mode === 'reflow') { state.reflowWidth = 480; applyReflowStyleVars(); saveProgress(); }
+  else { state.zoomMode = 'fit-width'; state.scale = 1; renderCurrent(); }
+  updateZoomPopLabels();
+});
+document.getElementById('zoom-fit-page').addEventListener('click', () => {
+  if (state.mode === 'reflow') { state.reflowWidth = 760; applyReflowStyleVars(); saveProgress(); }
+  else { state.zoomMode = 'fit-page'; state.scale = 1; renderCurrent(); }
+  updateZoomPopLabels();
+});
 
 // ---------------- Progress thread interaction ----------------
 els.progressThread.addEventListener('click', (e) => {
@@ -747,24 +1136,30 @@ els.progressThread.addEventListener('click', (e) => {
 // ---------------- Page-turn click zones + swipe ----------------
 document.getElementById('page-viewport').addEventListener('click', (e) => {
   if (state.mode !== 'page') return;
+  if (suppressNextClick) { suppressNextClick = false; return; }
   const w = window.innerWidth;
   if (e.clientX < w * 0.25) prevPage();
   else if (e.clientX > w * 0.75) nextPage();
 });
-let touchStartX = null;
-document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; }, { passive: true });
+let touchStartX = null, touchStartY = null, suppressNextClick = false;
+document.addEventListener('touchstart', e => { touchStartX = e.touches[0].clientX; touchStartY = e.touches[0].clientY; }, { passive: true });
 document.addEventListener('touchend', e => {
   if (touchStartX === null) return;
   const dx = e.changedTouches[0].clientX - touchStartX;
-  if (Math.abs(dx) > 60 && state.mode === 'page') { dx < 0 ? nextPage() : prevPage(); }
-  touchStartX = null;
+  const dy = e.changedTouches[0].clientY - touchStartY;
+  if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5 && state.mode === 'page') {
+    suppressNextClick = true;
+    dx < 0 ? nextPage() : prevPage();
+  }
+  touchStartX = null; touchStartY = null;
 });
 
 // ---------------- Keyboard ----------------
 document.addEventListener('keydown', (e) => {
   if (!state.pdfDoc) return;
   switch (e.key) {
-    case 'ArrowRight': case ' ': case 'PageDown': nextPage(); e.preventDefault(); break;
+    case 'ArrowRight': case 'PageDown': nextPage(); e.preventDefault(); break;
+    case ' ': if (state.listening) togglePlayPause(); else nextPage(); e.preventDefault(); break;
     case 'ArrowLeft': case 'PageUp': prevPage(); e.preventDefault(); break;
     case 'Home': goToPage(1, true); break;
     case 'End': goToPage(state.totalPages, true); break;
@@ -797,6 +1192,17 @@ window.addEventListener('resize', () => {
 
 // ---------------- Init ----------------
 renderLibraryLists();
+
+// ---------------- Service Worker (offline) ----------------
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      console.log('Folio SW registered, scope:', reg.scope);
+    }).catch(err => {
+      console.warn('SW registration failed:', err);
+    });
+  });
+}
 </script>
 </body>
 </html>
