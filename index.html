@@ -158,6 +158,7 @@
   #book-stage { width: 100%; height: 100%; position: relative; display: flex; align-items: center; justify-content: center; }
 
   #page-viewport { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; perspective: 2400px; touch-action: pan-y manipulation; }
+  #page-viewport.reflow-mode, #page-viewport.scroll-mode { display: block; align-items: unset; justify-content: unset; perspective: none; overflow: hidden; }
 
   .leaf-wrap {
     position: relative;
@@ -187,7 +188,7 @@
   #spread .leaf.left .leaf-wrap { border-radius: 2px 0 0 2px; }
   #spread .leaf.right .leaf-wrap { border-radius: 0 2px 2px 0; }
 
-  #scroll-container { width: min(820px, 92vw); height: 100%; overflow-y: auto; padding: 40px 0 80px; scroll-behavior: smooth; }
+  #scroll-container { width: min(820px, 92vw); height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch; padding: 40px 0 80px; scroll-behavior: smooth; }
   #scroll-container .scroll-page { margin: 0 auto 18px; background: var(--paper); box-shadow: 0 18px 44px var(--paper-shadow); border-radius: 2px; }
   #scroll-container .scroll-page canvas { display: block; border-radius: 2px; }
 
@@ -195,7 +196,7 @@
   #reflow-container {
     width: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
     background: var(--paper); scroll-behavior: smooth;
-    padding: 56px 0 110px;
+    padding: calc(60px + env(safe-area-inset-top)) 0 calc(110px + env(safe-area-inset-bottom));
   }
   .reflow-page {
     max-width: var(--reflow-width, 620px); margin: 0 auto; padding: 0 26px 40px;
@@ -634,11 +635,13 @@ async function openFile(file) {
 async function getFitScale(pageNum, mode) {
   const page = await state.pdfDoc.getPage(pageNum);
   const base = page.getViewport({ scale: 1 });
-  const vw = document.getElementById('page-viewport');
-  const availH = vw.clientHeight - 24;
-  const availW = state.spreadOn && state.mode === 'page' ? (vw.clientWidth - 26) / 2 - 24 : Math.min(vw.clientWidth - 40, 760);
+  const vp = document.getElementById('page-viewport');
+  const availH = Math.max(vp.clientHeight || window.innerHeight, 400) - 24;
+  const availW = state.spreadOn && state.mode === 'page'
+    ? (Math.max(vp.clientWidth || window.innerWidth, 300) - 26) / 2 - 24
+    : Math.min(Math.max(vp.clientWidth || window.innerWidth, 300) - 40, 760);
   if (mode === 'fit-page') return Math.min(availW / base.width, availH / base.height);
-  return availW / base.width; // fit-width
+  return availW / base.width;
 }
 
 async function renderToCanvas(canvas, pageNum, scaleOverride) {
@@ -773,37 +776,44 @@ async function renderScrollMode() {
 
 async function renderReflowMode() {
   applyReflowStyleVars();
-  if (els.reflowContainer.dataset.built === String(state.bookId)) return;
+  if (els.reflowContainer.dataset.built === String(state.bookId)) {
+    const target = els.reflowContainer.children[state.currentPage - 1];
+    if (target) target.scrollIntoView();
+    return;
+  }
   els.reflowContainer.innerHTML = '';
   els.reflowContainer.dataset.built = String(state.bookId);
+
   for (let i = 1; i <= state.totalPages; i++) {
     const wrap = document.createElement('div');
     wrap.className = 'reflow-page';
     wrap.dataset.page = i;
-    wrap.innerHTML = '<div class="reflow-skeleton">···</div>';
+    wrap.innerHTML = '<p class="reflow-skeleton" style="opacity:0.4;font-style:italic;">Loading page ' + i + '…</p>';
     els.reflowContainer.appendChild(wrap);
   }
+
+  // Scroll to saved page first, then start observing
+  const startTarget = els.reflowContainer.children[state.currentPage - 1];
+  if (startTarget) startTarget.scrollIntoView();
+
+  // Use reflowContainer as root for accurate iOS scroll detection
   const observer = new IntersectionObserver(entries => {
     entries.forEach(en => {
       const p = Number(en.target.dataset.page);
-      if (en.isIntersecting) {
-        if (!en.target.dataset.rendered) {
-          en.target.dataset.rendered = '1';
-          extractParagraphs(p).then(paras => {
-            en.target.innerHTML = paras.length
-              ? paras.map(t => `<p>${escapeHtml(t)}</p>`).join('')
-              : '<p class="reflow-empty">No selectable text on this page (likely a scan or image) — switch to Page view to see it.</p>';
-          });
-        }
+      if (en.isIntersecting && !en.target.dataset.rendered) {
+        en.target.dataset.rendered = '1';
+        extractParagraphs(p).then(paras => {
+          en.target.innerHTML = paras.length
+            ? paras.map(t => `<p>${escapeHtml(t)}</p>`).join('')
+            : '<p class="reflow-empty">No selectable text on this page — switch to Page view to see it as an image.</p>';
+        });
         state.currentPage = p;
         updateProgressUI();
       }
     });
-  }, { root: els.reflowContainer, threshold: 0.35 });
-  [...els.reflowContainer.children].forEach(c => observer.observe(c));
+  }, { root: els.reflowContainer, rootMargin: '200px', threshold: 0.1 });
 
-  const target = els.reflowContainer.children[state.currentPage - 1];
-  if (target) target.scrollIntoView();
+  [...els.reflowContainer.children].forEach(c => observer.observe(c));
 }
 
 // ---------------- Listen (text-to-speech) ----------------
@@ -1040,12 +1050,20 @@ async function renderOutlineLevel(items) {
 
 // ---------------- Mode / theme / zoom controls ----------------
 function applyModeUI() {
+  const vp = document.getElementById('page-viewport');
+  vp.classList.toggle('reflow-mode', state.mode === 'reflow');
+  vp.classList.toggle('scroll-mode', state.mode === 'scroll');
   els.btnSpread.classList.toggle('active', state.spreadOn && state.mode === 'page');
   els.btnScroll.classList.toggle('active', state.mode === 'scroll');
   els.btnReflow.classList.toggle('active', state.mode === 'reflow');
-  document.getElementById('page-viewport').querySelector('#spread').hidden = state.mode !== 'page';
+  document.getElementById('spread').hidden = state.mode !== 'page';
   els.scrollContainer.hidden = state.mode !== 'scroll';
   els.reflowContainer.hidden = state.mode !== 'reflow';
+  // force single-page on narrow screens
+  if (window.innerWidth < 700 && state.mode === 'page') {
+    state.spreadOn = false;
+    els.spread.classList.add('single-mode');
+  }
   stopListening();
 }
 
