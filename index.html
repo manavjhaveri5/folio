@@ -490,6 +490,60 @@ function hashId(name, size) {
   for (let i = 0; i < str.length; i++) { h = ((h << 5) - h + str.charCodeAt(i)) | 0; }
   return 'b' + Math.abs(h);
 }
+
+// ---------- IndexedDB for PDF binaries ----------
+let _idb = null;
+function openIDB() {
+  if (_idb) return Promise.resolve(_idb);
+  return new Promise((res, rej) => {
+    const req = indexedDB.open('folio-pdfs', 1);
+    req.onupgradeneeded = e => e.target.result.createObjectStore('pdfs');
+    req.onsuccess = e => { _idb = e.target.result; res(_idb); };
+    req.onerror = () => rej(req.error);
+  });
+}
+async function savePdfToIDB(id, buffer) {
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('pdfs', 'readwrite');
+      tx.objectStore('pdfs').put(buffer, id);
+      tx.oncomplete = () => res(true);
+      tx.onerror = () => rej(tx.error);
+    });
+  } catch (e) { console.warn('IDB save failed:', e); return false; }
+}
+async function loadPdfFromIDB(id) {
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const tx = db.transaction('pdfs', 'readonly');
+      const req = tx.objectStore('pdfs').get(id);
+      req.onsuccess = () => res(req.result || null);
+      req.onerror = () => rej(req.error);
+    });
+  } catch (e) { return null; }
+}
+async function listIDBIds() {
+  try {
+    const db = await openIDB();
+    return new Promise((res, rej) => {
+      const req = db.transaction('pdfs', 'readonly').objectStore('pdfs').getAllKeys();
+      req.onsuccess = () => res(req.result);
+      req.onerror = () => rej(req.error);
+    });
+  } catch (e) { return []; }
+}
+async function deleteFromIDB(id) {
+  try {
+    const db = await openIDB();
+    return new Promise((res) => {
+      const tx = db.transaction('pdfs', 'readwrite');
+      tx.objectStore('pdfs').delete(id);
+      tx.oncomplete = () => res(true);
+    });
+  } catch (e) { return false; }
+}
 async function loadLibrary() {
   try {
     const v = localStorage.getItem('folio:library');
@@ -538,7 +592,8 @@ function showToast(msg) {
 // ---------------- Library UI (empty state) ----------------
 async function renderLibraryLists() {
   const list = await loadLibrary();
-  const build = (container, withReopen) => {
+  const idbIds = new Set(await listIDBIds());
+  const build = (container) => {
     container.innerHTML = '';
     if (!list.length) {
       if (container === els.libListDrawer) container.innerHTML = '<div style="font-size:12px;color:var(--chrome-text-dim);">No books yet.</div>';
@@ -547,8 +602,16 @@ async function renderLibraryLists() {
     list.forEach(b => {
       const btn = document.createElement('button');
       const pct = Math.round((b.lastPage / Math.max(b.totalPages,1)) * 100);
-      btn.innerHTML = `<span>${escapeHtml(b.name)}</span><span class="pct">${pct}%</span>`;
-      btn.onclick = () => { pendingReopenId = b.id; els.fileInput.click(); };
+      const cached = idbIds.has(b.id);
+      btn.innerHTML = `<span>${escapeHtml(b.name)}</span><span class="pct">${cached ? '📖 ' : ''}${pct}%</span>`;
+      btn.title = cached ? 'Tap to reopen (saved on device)' : 'Tap to reopen (you\'ll need to select the file again)';
+      btn.onclick = async () => {
+        if (cached) {
+          const buf = await loadPdfFromIDB(b.id);
+          if (buf) { await openBuffer(buf, b.name + '.pdf', b.id); return; }
+        }
+        pendingReopenId = b.id; els.fileInput.click();
+      };
       container.appendChild(btn);
     });
   };
@@ -564,6 +627,12 @@ els.emptyState.addEventListener('click', () => { pendingReopenId = null; els.fil
 els.btnOpen.addEventListener('click', () => { pendingReopenId = null; els.fileInput.click(); });
 els.fileInput.addEventListener('change', (e) => { if (e.target.files[0]) openFile(e.target.files[0]); });
 
+// Open from a raw ArrayBuffer (e.g. loaded from IndexedDB)
+async function openBuffer(buffer, fileName, knownId) {
+  const fakeFile = { name: fileName, size: buffer.byteLength, type: 'application/pdf', arrayBuffer: () => Promise.resolve(buffer) };
+  await openFile(fakeFile, knownId);
+}
+
 ['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => {
   e.preventDefault();
   if ([...e.dataTransfer.items].some(i => i.type === 'application/pdf')) els.dropVeil.classList.add('show');
@@ -577,17 +646,14 @@ document.addEventListener('drop', e => {
   if (f && f.type === 'application/pdf') { pendingReopenId = null; openFile(f); }
 });
 
-async function openFile(file) {
+async function openFile(file, knownId) {
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
     showToast('That doesn\'t look like a PDF.'); return;
   }
-  const id = hashId(file.name, file.size);
-  if (pendingReopenId && pendingReopenId !== id) {
-    showToast('Different file selected — opening it fresh.');
-  }
   const buf = await file.arrayBuffer();
+  const id = knownId || hashId(file.name, file.size);
   try {
-    const loadingTask = pdfjsLib.getDocument({ data: buf });
+    const loadingTask = pdfjsLib.getDocument({ data: buf.slice(0) });
     const pdfDoc = await loadingTask.promise;
     state.pdfDoc = pdfDoc;
     state.bookId = id;
@@ -624,6 +690,16 @@ async function openFile(file) {
     await upsertLibraryEntry({ id, name: state.fileName, totalPages: state.totalPages, lastPage: state.currentPage, lastOpened: Date.now() });
     revealChromeBriefly();
     showToast(saved ? 'Welcome back — resumed where you left off.' : 'Opened ' + state.fileName);
+    // Save PDF binary so it auto-opens next session
+    savePdfToIDB(id, buf).then(async ok => {
+      if (ok) {
+        // Prune IDB: keep only the 6 most recent books
+        const lib = await loadLibrary();
+        const keepIds = new Set(lib.slice(0, 6).map(b => b.id));
+        const allIds = await listIDBIds();
+        for (const old of allIds) { if (!keepIds.has(old)) deleteFromIDB(old); }
+      }
+    });
   } catch (err) {
     console.error(err);
     showToast('Could not open that PDF.');
@@ -1215,7 +1291,20 @@ window.addEventListener('resize', () => {
 });
 
 // ---------------- Init ----------------
-renderLibraryLists();
+async function init() {
+  await renderLibraryLists();
+  // Auto-reopen the last book if it's cached in IDB
+  const lib = await loadLibrary();
+  if (lib.length) {
+    const last = lib[0];
+    const buf = await loadPdfFromIDB(last.id);
+    if (buf) {
+      showToast('Reopening ' + last.name + '…');
+      await openBuffer(buf, last.name + '.pdf', last.id);
+    }
+  }
+}
+init();
 
 // ---------------- Service Worker (offline) ----------------
 if ('serviceWorker' in navigator) {
