@@ -196,7 +196,7 @@
   #reflow-container {
     width: 100%; height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
     background: var(--paper); scroll-behavior: smooth;
-    padding: calc(60px + env(safe-area-inset-top)) 0 calc(110px + env(safe-area-inset-bottom));
+    padding: calc(80px + env(safe-area-inset-top)) 0 calc(110px + env(safe-area-inset-bottom));
   }
   .reflow-page {
     max-width: var(--reflow-width, 620px); margin: 0 auto; padding: 0 26px 40px;
@@ -1084,6 +1084,7 @@ els.btnReflow.addEventListener('click', () => {
   applyModeUI();
   if (state.mode === 'reflow') { els.reflowContainer.dataset.built = ''; renderReflowMode(); }
   else renderCurrent();
+  revealChromeBriefly();
   saveProgress();
 });
 els.btnTheme.addEventListener('click', () => {
@@ -1193,7 +1194,12 @@ let chromeTimer = null;
 function revealChromeBriefly() {
   els.app.classList.add('chrome-visible');
   clearTimeout(chromeTimer);
-  chromeTimer = setTimeout(() => { if (!els.drawer.classList.contains('open')) els.app.classList.remove('chrome-visible'); }, 2600);
+  // In reflow/scroll mode keep chrome visible permanently — user scrolls, not taps
+  if (state.mode === 'page') {
+    chromeTimer = setTimeout(() => {
+      if (!els.drawer.classList.contains('open')) els.app.classList.remove('chrome-visible');
+    }, 2600);
+  }
 }
 document.addEventListener('mousemove', () => { if (state.pdfDoc) revealChromeBriefly(); });
 document.addEventListener('touchstart', () => { if (state.pdfDoc) revealChromeBriefly(); }, { passive: true });
