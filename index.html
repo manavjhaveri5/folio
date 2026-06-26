@@ -1706,21 +1706,27 @@ document.getElementById('listen-speed').textContent = state.speechRate + 'x';
 
 // ── Narration picker (chapter selection) ──────────────────────
 async function openNarrationPicker() {
-  // Build chapter list from TOC, fall back to page ranges
-  let items = [{ label: 'Current page', page: state.currentPage, sub: `Page ${state.currentPage}` }];
+  let items = [{ label: 'Current page', page: state.currentPage, sub: `Page ${state.currentPage}`, depth: 0 }];
   try {
     const outline = await state.pdfDoc.getOutline();
     if (outline && outline.length) {
-      for (const item of outline.slice(0, 20)) {
-        try {
-          let dest = item.dest;
-          if (typeof dest === 'string') dest = await state.pdfDoc.getDestination(dest);
-          if (dest) {
-            const pageIdx = await state.pdfDoc.getPageIndex(dest[0]);
-            items.push({ label: item.title, page: pageIdx + 1, sub: `Page ${pageIdx + 1}` });
+      // Recursively flatten all levels
+      async function flattenOutline(nodes, depth) {
+        for (const item of nodes) {
+          try {
+            let dest = item.dest;
+            if (typeof dest === 'string') dest = await state.pdfDoc.getDestination(dest);
+            if (dest) {
+              const pageIdx = await state.pdfDoc.getPageIndex(dest[0]);
+              items.push({ label: item.title, page: pageIdx + 1, sub: `Page ${pageIdx + 1}`, depth });
+            }
+          } catch(e) {}
+          if (item.items && item.items.length) {
+            await flattenOutline(item.items, depth + 1);
           }
-        } catch(e) {}
+        }
       }
+      await flattenOutline(outline, 0);
     }
   } catch(e) {}
 
@@ -1748,8 +1754,8 @@ async function openNarrationPicker() {
   const list = panel.querySelector('#np-list');
   items.forEach(item => {
     const btn = document.createElement('button');
-    btn.style.cssText = `background:rgba(200,165,106,0.07);border:1px solid rgba(200,165,106,0.14);border-radius:14px;padding:14px 16px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;touch-action:manipulation;transition:background 0.12s;`;
-    btn.innerHTML = `<span style="font-size:14px;color:#f2e8d2;font-family:-apple-system,sans-serif;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.label)}</span><span style="font-size:11px;color:rgba(200,165,106,0.7);flex-shrink:0;">${item.sub}</span>`;
+    btn.style.cssText = `background:rgba(200,165,106,${item.depth > 0 ? '0.04' : '0.07'});border:1px solid rgba(200,165,106,${item.depth > 0 ? '0.08' : '0.14'});border-radius:14px;padding:${item.depth > 0 ? '10px 16px 10px' : '14px 16px'};padding-left:${16 + item.depth * 20}px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;touch-action:manipulation;transition:background 0.12s;`;
+    btn.innerHTML = `<span style="font-size:${item.depth > 0 ? '13px' : '14px'};color:${item.depth > 0 ? 'rgba(242,232,210,0.7)' : '#f2e8d2'};font-family:-apple-system,sans-serif;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.label)}</span><span style="font-size:11px;color:rgba(200,165,106,0.7);flex-shrink:0;">${item.sub}</span>`;
     btn.addEventListener('touchstart', () => btn.style.background = 'rgba(200,165,106,0.18)', { passive:true });
     btn.addEventListener('touchend', () => btn.style.background = 'rgba(200,165,106,0.07)', { passive:true });
     btn.addEventListener('click', () => {
