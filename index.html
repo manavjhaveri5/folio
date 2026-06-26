@@ -1299,9 +1299,12 @@ async function init() {
     const last = lib[0];
     const buf = await loadPdfFromIDB(last.id);
     if (buf) {
-      showToast('Reopening ' + last.name + '…');
       await openBuffer(buf, last.name + '.pdf', last.id);
+      return;
     }
+    // IDB cache not found yet — show a nudge on the empty state
+    const hint = document.querySelector('#empty-state .hint');
+    if (hint) hint.textContent = 'Open "' + last.name + '" once to enable auto-open';
   }
 }
 init();
