@@ -2391,13 +2391,19 @@ async function init() {
 }
 init();
 
-// ---------------- Service Worker (offline) ----------------
+// ---------------- Service Worker (offline + auto-update) ----------------
 if ('serviceWorker' in navigator) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register('/sw.js').then(reg => {
-      console.log('Folio SW registered, scope:', reg.scope);
-    }).catch(err => {
-      console.warn('SW registration failed:', err);
+      console.log('Folio SW registered');
+    }).catch(err => console.warn('SW failed:', err));
+
+    // When the SW sends SW_UPDATED, reload to get fresh HTML
+    navigator.serviceWorker.addEventListener('message', e => {
+      if (e.data?.type === 'SW_UPDATED') {
+        console.log('New version available — reloading');
+        window.location.reload();
+      }
     });
   });
 }
