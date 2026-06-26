@@ -1204,6 +1204,7 @@ async function openFile(file, knownId) {
     const loadingTask = pdfjsLib.getDocument({ data: buf.slice(0) });
     const pdfDoc = await loadingTask.promise;
     state.pdfDoc = pdfDoc;
+    narratorProfile = null; // reset narrator profile for new book
     state.bookId = id;
     state.fileName = file.name.replace(/\.pdf$/i, '');
     state.totalPages = pdfDoc.numPages;
@@ -1509,15 +1510,33 @@ function stopListening() {
 
 async function startListening() {
   if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); }
-  if (hasOpenAIKey()) {
-    showToast('Using OpenAI voice…');
-  } else if (!('speechSynthesis' in window)) {
-    showToast('No TTS available — add OpenAI key in settings'); return;
+  if (!hasOpenAIKey()) {
+    showToast('Add your OpenAI key in Settings → AI Voice'); return;
   }
   els.listenBar.hidden = false;
   els.btnListen.classList.add('active');
   state.listening = true;
   startReadingSession();
+
+  // Generate narrator profile for this book (if not cached)
+  if (state.bookId && !narratorProfile) {
+    const cached = localStorage.getItem('folio:narrator:' + state.bookId);
+    if (cached) {
+      narratorProfile = cached;
+    } else {
+      showToast('Reading the book to set the right voice…');
+      // Sample from pages 1-3 for profile
+      const sample = [];
+      for (let p = 1; p <= Math.min(3, state.totalPages); p++) {
+        const paras = await extractParagraphs(p);
+        sample.push(...paras);
+        if (sample.join(' ').length > 2000) break;
+      }
+      narratorProfile = await generateNarratorProfile(state.bookId, sample.join('\n\n'));
+      if (narratorProfile) showToast('Voice calibrated ✓');
+    }
+  }
+
   await speakPage(state.currentPage, 0);
 }
 
@@ -1976,6 +1995,13 @@ document.getElementById('export-start-btn').addEventListener('click', async () =
 
   if (!batches.length) { showToast('No text found in those pages'); document.getElementById('export-progress').hidden = true; document.getElementById('export-start-btn').disabled = false; return; }
 
+  // 2b. Ensure narrator profile is loaded
+  if (!narratorProfile && state.bookId) {
+    document.getElementById('export-progress-label').textContent = 'Calibrating narrator voice…';
+    const sample = allChunks.slice(0, 8).join('\n\n');
+    narratorProfile = await generateNarratorProfile(state.bookId, sample);
+  }
+
   // 3. Generate audio for each batch (with concurrency limit of 3)
   const audioBuffers = new Array(batches.length).fill(null);
   let done = 0;
@@ -1983,13 +2009,22 @@ document.getElementById('export-start-btn').addEventListener('click', async () =
   async function fetchBatch(i) {
     if (exportAborted) return;
     try {
-      const res = await fetch('https://api.openai.com/v1/audio/speech', {
+      const text = batches[i];
+      const mood = paragraphMoodInstruction(text);
+      const instructions = [narratorProfile, mood].filter(Boolean).join('\n\n');
+      const body = { model: 'gpt-4o-mini-tts', input: text, voice };
+      if (instructions) body.instructions = instructions;
+      let res = await fetch('https://api.openai.com/v1/audio/speech', {
         method: 'POST',
         headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model: 'tts-1-hd', input: batches[i], voice, response_format: 'mp3' })
+        body: JSON.stringify(body)
       });
-      if (!res.ok) throw new Error('TTS ' + res.status);
-      audioBuffers[i] = await res.arrayBuffer();
+      if (!res.ok) res = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'tts-1-hd', input: text, voice })
+      });
+      audioBuffers[i] = res.ok ? await res.arrayBuffer() : new ArrayBuffer(0);
     } catch (e) { audioBuffers[i] = new ArrayBuffer(0); }
     done++;
     const pct = Math.round((done / batches.length) * 100);
@@ -2218,25 +2253,95 @@ let aiPageNum = null;
 let aiPlaying = false;
 const OPENAI_VOICES = ['onyx','nova','shimmer','alloy','echo','fable'];
 
-async function fetchOpenAIAudio(text) {
+// ── Narrator profile (book-level, cached per book) ──────────────────
+let narratorProfile = null; // active profile for current book
+
+async function generateNarratorProfile(bookId, sampleText) {
+  const cached = localStorage.getItem('folio:narrator:' + bookId);
+  if (cached) return cached;
+  const key = localStorage.getItem('folio:openai-key');
+  if (!key || !sampleText) return null;
+  try {
+    const res = await fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'gpt-4o-mini',
+        max_tokens: 180,
+        messages: [{
+          role: 'user',
+          content: `You are a voice director. Analyze this book excerpt and write concise narrator instructions (3-4 sentences) for a text-to-speech AI: describe the genre, emotional tone, ideal pace, voice character, and how it should feel to listen to. Be specific and evocative — these become live reading instructions.\n\nExcerpt:\n${sampleText.slice(0, 2500)}`
+        }]
+      })
+    });
+    const data = await res.json();
+    const profile = data.choices?.[0]?.message?.content?.trim() || null;
+    if (profile) localStorage.setItem('folio:narrator:' + bookId, profile);
+    return profile;
+  } catch (e) { return null; }
+}
+
+// ── Paragraph-level mood overlay (zero API calls, instant) ──────────
+function paragraphMoodInstruction(text) {
+  const words = text.split(/\s+/).length;
+  const hasDialogue = (text.match(/["""''‟‛]/g) || []).length >= 2;
+  const isQuestion = text.trimEnd().endsWith('?');
+  const hasExclamation = text.includes('!');
+  const isTense = /\b(suddenly|burst|slammed|terror|fear|desperate|urgent|screamed|gasped|raced|danger|threat|crash)\b/i.test(text);
+  const isReflective = /\b(perhaps|wondered|realized|thought|felt|seemed|memories|silence|slowly|quietly|gently)\b/i.test(text);
+  const isLecture = words > 60 && !hasDialogue;
+  const isStaccato = words < 18 && !hasDialogue;
+
+  if (isTense)        return 'Raise urgency. Tighten pacing. Let tension creep into the voice.';
+  if (hasDialogue)    return 'This is dialogue. Read conversationally with natural voice characterization — give each speaker presence.';
+  if (isQuestion)     return 'Contemplative, slightly rising inflection. Let the question breathe.';
+  if (hasExclamation) return 'Deliver with energy and conviction. Lean in.';
+  if (isReflective)   return 'Slow and inward. Thoughtful, quiet delivery — like thinking aloud.';
+  if (isStaccato)     return 'Short. Deliberate. Let each sentence land with weight.';
+  if (isLecture)      return 'Measured and authoritative. Clear enunciation, steady pace — educational gravitas.';
+  return '';
+}
+
+// ── Core TTS fetch with mood instructions ────────────────────────────
+async function fetchOpenAIAudio(text, overrideInstructions) {
   const key = localStorage.getItem('folio:openai-key');
   if (!key) return null;
   const voice = localStorage.getItem('folio:openai-voice') || 'onyx';
+
+  const moodLayer = paragraphMoodInstruction(text);
+  const instructions = overrideInstructions
+    || [narratorProfile, moodLayer].filter(Boolean).join('\n\n');
+
+  const body = {
+    model: 'gpt-4o-mini-tts',
+    input: text.slice(0, 4096),
+    voice
+  };
+  if (instructions) body.instructions = instructions;
+
   try {
     const res = await fetch('https://api.openai.com/v1/audio/speech', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'tts-1', input: text.slice(0, 4096), voice })
+      body: JSON.stringify(body)
     });
-    if (!res.ok) { console.warn('OpenAI TTS error', res.status); return null; }
-    const blob = await res.blob();
-    return new Audio(URL.createObjectURL(blob));
-  } catch (e) { console.warn('OpenAI TTS fetch failed', e); return null; }
+    if (!res.ok) {
+      // Fallback to tts-1-hd if gpt-4o-mini-tts unavailable
+      const b2 = { model: 'tts-1-hd', input: text.slice(0, 4096), voice };
+      const r2 = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST', headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify(b2)
+      });
+      if (!r2.ok) return null;
+      return new Audio(URL.createObjectURL(await r2.blob()));
+    }
+    return new Audio(URL.createObjectURL(await res.blob()));
+  } catch (e) { console.warn('TTS error', e); return null; }
 }
 
 function hasOpenAIKey() { return !!localStorage.getItem('folio:openai-key'); }
 
-// Preload next paragraph's audio while current is playing
+// Preload next paragraph while current plays
 async function preloadNext(paras, idx) {
   if (!hasOpenAIKey()) return;
   const next = paras[idx];
