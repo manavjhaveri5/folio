@@ -1164,7 +1164,7 @@ els.fileInput.addEventListener('change', (e) => { if (e.target.files[0]) openFil
 
 // Home button — go back to library
 els.btnHome.addEventListener('click', () => {
-  stopListening();
+  nStop();
   els.book.hidden = true;
   els.libraryScreen.hidden = false;
   renderLibraryScreen();
@@ -1441,98 +1441,197 @@ async function renderReflowMode() {
   [...els.reflowContainer.children].forEach(c => observer.observe(c));
 }
 
-// ---------------- Listen (text-to-speech) ----------------
-let synthVoices = [];
-let currentUtterance = null;
-let listenPageParas = [];
-let listenParaIdx = 0;
-let listenPageNum = null;
+// ══════════════════════════════════════════════════════════════
+// NARRATION ENGINE v2 — single audio, sequence-locked, no ghosts
+// ══════════════════════════════════════════════════════════════
 const SPEEDS = [0.75, 1, 1.25, 1.5, 1.75, 2];
 
-function loadVoices() {
-  if (!('speechSynthesis' in window)) return;
-  synthVoices = window.speechSynthesis.getVoices();
-  const sel = document.getElementById('listen-voice');
-  if (!sel || !synthVoices.length) return;
-  const prevValue = sel.value;
-  sel.innerHTML = '';
-  const sorted = [...synthVoices].sort((a, b) => (b.lang.startsWith('en') - a.lang.startsWith('en')) || a.name.localeCompare(b.name));
-  sorted.forEach(v => {
-    const opt = document.createElement('option');
-    opt.value = v.voiceURI;
-    opt.textContent = v.name.replace(/^Microsoft |^Google /, '') + ' · ' + v.lang;
-    sel.appendChild(opt);
-  });
-  const saved = localStorage.getItem('folio:voiceURI');
-  if (saved && sorted.some(v => v.voiceURI === saved)) sel.value = saved;
-  else if (prevValue && sorted.some(v => v.voiceURI === prevValue)) sel.value = prevValue;
-}
-if ('speechSynthesis' in window) {
-  window.speechSynthesis.onvoiceschanged = loadVoices;
-  loadVoices();
-}
+// Single source of truth for narration state
+const N = {
+  active: false,
+  page: 0,
+  idx: 0,
+  doms: [],      // p elements on current rendered page
+  texts: [],     // [{text, buffer?}] — buffer = preloaded mp3 ArrayBuffer
+  audio: null,   // the ONE active Audio element
+  seq: 0,        // incremented on every stop/skip to cancel stale callbacks
+  busy: false,   // re-entrance guard
+};
 
-async function ensureReflowPageRendered(pageNum) {
-  if (els.reflowContainer.dataset.built !== String(state.bookId)) await renderReflowMode();
-  const wrap = els.reflowContainer.children[pageNum - 1];
-  if (!wrap) return null;
-  if (!wrap.dataset.rendered) {
-    wrap.dataset.rendered = '1';
-    const paras = await extractParagraphs(pageNum);
-    wrap.innerHTML = paras.length
-      ? paras.map(t => `<p>${escapeHtml(t)}</p>`).join('')
-      : '<p class="reflow-empty">No selectable text on this page.</p>';
-  }
-  return wrap;
-}
-
-function updateListenPlayIcon() {
+// ── Helpers ─────────────────────────────────────────────────
+function nSetIcon(playing) {
   const btn = document.getElementById('listen-playpause');
   if (!btn) return;
-  const aiPlaying = aiCurrentAudio && !aiCurrentAudio.paused && !aiCurrentAudio.ended;
-  const ttsPlaying = 'speechSynthesis' in window && window.speechSynthesis.speaking && !window.speechSynthesis.paused;
-  const playing = state.listening && (aiPlaying || ttsPlaying);
   btn.innerHTML = playing
     ? '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4" height="14"/><rect x="14" y="5" width="4" height="14"/></svg>'
     : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 5l12 7-12 7V5z"/></svg>';
 }
 
-function stopListening() {
-  const wasListening = state.listening;
-  state.listening = false;
-  if (aiCurrentAudio) { aiCurrentAudio.pause(); aiCurrentAudio.onended = null; aiCurrentAudio = null; }
-  if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; currentUtterance = null; }
+function nStop() {
+  N.active = false;
+  N.seq++;          // cancel any in-flight callbacks
+  N.busy  = false;
+  if (N.audio) { try { N.audio.pause(); } catch(e){} N.audio.onended = null; N.audio = null; }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  aiPageParas = [];
   document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
-  if (els.listenBar) els.listenBar.hidden = true;
-  if (els.btnListen) els.btnListen.classList.remove('active');
-  if (wasListening) { updateListenPlayIcon(); endReadingSession(); }
+  if (els.listenBar)  els.listenBar.hidden = true;
+  if (els.btnListen)  els.btnListen.classList.remove('active');
+  nSetIcon(false);
+  endReadingSession();
 }
 
-async function startListening() {
-  if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); await renderReflowMode(); }
+// ── Preload next paragraph's MP3 as raw buffer ────────────────
+async function nPreload(idx) {
+  if (idx >= N.texts.length) return;
+  const obj = N.texts[idx];
+  if (!obj || obj.buffer || obj.loading || !obj.text || obj.text.length < 15) return;
+  obj.loading = true;
+  const key  = localStorage.getItem('folio:openai-key');
+  const voice= localStorage.getItem('folio:openai-voice') || 'onyx';
+  const mood = paragraphMoodInstruction(obj.text);
+  const inst = [narratorProfile, mood].filter(Boolean).join('\n\n');
+  for (const model of ['gpt-4o-mini-tts','tts-1-hd','tts-1']) {
+    const body = { model, input: obj.text.slice(0, 4096), voice };
+    if (inst && model === 'gpt-4o-mini-tts') body.instructions = inst;
+    try {
+      const res = await fetch('https://api.openai.com/v1/audio/speech', {
+        method:'POST', headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+        body: JSON.stringify(body)
+      });
+      if (res.ok) { obj.buffer = await res.arrayBuffer(); break; }
+    } catch(e) {}
+  }
+  obj.loading = false;
+}
+
+// ── Core play loop ────────────────────────────────────────────
+async function nPlay() {
+  if (!N.active || N.busy) return;
+  N.busy = true;
+  const mySeq = N.seq;
+
+  // Skip short/empty paragraphs
+  while (N.idx < N.doms.length && (N.texts[N.idx]?.text || '').trim().length < 15) N.idx++;
+
+  // Page exhausted → advance
+  if (N.idx >= N.doms.length) {
+    N.busy = false;
+    if (N.page < state.totalPages) {
+      await nLoadPage(N.page + 1);
+      if (mySeq !== N.seq) return;
+      await nPlay();
+    } else {
+      showToast('Finished the book 🎉');
+      nStop();
+    }
+    return;
+  }
+
+  // Highlight and scroll
+  document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
+  const dom = N.doms[N.idx];
+  dom.classList.add('speaking');
+  dom.scrollIntoView({ behavior:'smooth', block:'center' });
+
+  // Kill any lingering audio
+  if (N.audio) { try { N.audio.pause(); } catch(e){} N.audio.onended = null; N.audio = null; }
+
+  const text = N.texts[N.idx]?.text || dom.textContent.trim();
+  const obj  = N.texts[N.idx];
+
+  // Callback — guarded by sequence
+  const onEnd = () => {
+    if (mySeq !== N.seq || !N.active) return;
+    recordPageRead();
+    N.idx++;
+    N.busy = false;
+    nPlay();
+  };
+
+  // Build audio from preloaded buffer or fetch fresh
+  let audio = null;
+  if (obj?.buffer && obj.buffer.byteLength > 100) {
+    audio = new Audio(URL.createObjectURL(new Blob([obj.buffer], { type: 'audio/mpeg' })));
+  } else {
+    // fetch inline (first para on each page — not yet preloaded)
+    audio = await (async () => {
+      const key  = localStorage.getItem('folio:openai-key');
+      const voice= localStorage.getItem('folio:openai-voice') || 'onyx';
+      const mood = paragraphMoodInstruction(text);
+      const inst = [narratorProfile, mood].filter(Boolean).join('\n\n');
+      for (const model of ['gpt-4o-mini-tts','tts-1-hd','tts-1']) {
+        const body = { model, input: text.slice(0, 4096), voice };
+        if (inst && model === 'gpt-4o-mini-tts') body.instructions = inst;
+        try {
+          const res = await fetch('https://api.openai.com/v1/audio/speech', {
+            method:'POST', headers:{'Authorization':'Bearer '+key,'Content-Type':'application/json'},
+            body: JSON.stringify(body)
+          });
+          if (res.ok) {
+            const blob = await res.blob();
+            if (blob.size > 100) return new Audio(URL.createObjectURL(blob));
+          } else if (res.status === 401) { showToast('OpenAI key rejected'); nStop(); return null; }
+          else if (res.status === 429) { await new Promise(r => setTimeout(r, 2000)); }
+        } catch(e) { console.warn('TTS fetch error', e); }
+      }
+      return null;
+    })();
+    if (mySeq !== N.seq) return; // cancelled while fetching
+  }
+
+  if (!audio || !N.active) { onEnd(); return; }
+
+  N.audio = audio;
+  audio.playbackRate = state.speechRate;
+  audio.onended  = onEnd;
+  audio.onerror  = onEnd;
+  audio.play().catch(onEnd);
+  nSetIcon(true);
+  N.busy = false;
+
+  // Preload next 2 paragraphs
+  nPreload(N.idx + 1);
+  nPreload(N.idx + 2);
+}
+
+// ── Load a page into N ────────────────────────────────────────
+async function nLoadPage(pageNum) {
+  goToPage(pageNum, false);
+  const wrap = await ensureReflowPageRendered(pageNum);
+  if (!wrap) return;
+  N.page  = pageNum;
+  N.idx   = 0;
+  N.doms  = [...wrap.querySelectorAll('p')].filter(p => !p.classList.contains('reflow-empty'));
+  N.texts = N.doms.map(p => ({ text: p.textContent.trim() }));
+}
+
+// ── Public start ─────────────────────────────────────────────
+async function nStart(pageNum) {
   if (!hasOpenAIKey()) { showToast('Add OpenAI key in Settings → AI Voice'); return; }
-  showToast('Connecting to OpenAI…');
-  const keyOk = await verifyOpenAIKey();
-  if (!keyOk) { showToast('OpenAI key invalid — re-enter in Settings'); return; }
+  if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); await renderReflowMode(); }
+
+  showToast('Connecting…');
+  if (!await verifyOpenAIKey()) { showToast('OpenAI key invalid — re-enter in Settings'); return; }
+
+  // Reset
+  N.seq++;
+  N.active = true;
+  N.busy   = false;
+  N.audio  = null;
   els.listenBar.hidden = false;
   els.btnListen.classList.add('active');
-  state.listening = true;
   startReadingSession();
 
-  // Generate narrator profile for this book (if not cached)
+  // Narrator profile
   if (state.bookId && !narratorProfile) {
     const cached = localStorage.getItem('folio:narrator:' + state.bookId);
     if (cached) {
       narratorProfile = cached;
     } else {
       showToast('Calibrating narrator voice…');
-      // Sample from pages 1-3 for profile
       const sample = [];
       for (let p = 1; p <= Math.min(3, state.totalPages); p++) {
-        const paras = await extractParagraphs(p);
-        sample.push(...paras);
+        sample.push(...await extractParagraphs(p));
         if (sample.join(' ').length > 2000) break;
       }
       narratorProfile = await generateNarratorProfile(state.bookId, sample.join('\n\n'));
@@ -1540,124 +1639,115 @@ async function startListening() {
     }
   }
 
-  await speakPage(state.currentPage, 0);
+  await nLoadPage(pageNum || state.currentPage);
+  if (N.active) await nPlay();
 }
 
-function togglePlayPause() {
-  if (!state.listening) { startListening(); return; }
-  if (hasOpenAIKey()) {
-    if (aiCurrentAudio) {
-      if (aiCurrentAudio.paused) aiCurrentAudio.play();
-      else aiCurrentAudio.pause();
-    }
-  } else {
-    if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) window.speechSynthesis.pause();
-    else if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+// ── Button wiring ─────────────────────────────────────────────
+els.btnListen.addEventListener('click', () => {
+  if (N.active) { nStop(); }
+  else { openNarrationPicker(); }
+});
+
+document.getElementById('listen-playpause').addEventListener('click', () => {
+  if (!N.active) { openNarrationPicker(); return; }
+  if (N.audio) {
+    if (N.audio.paused) { N.audio.play(); nSetIcon(true); }
+    else { N.audio.pause(); nSetIcon(false); }
   }
-  setTimeout(updateListenPlayIcon, 60);
-}
+});
 
-function skipParagraph(delta) {
-  if (!state.listening) return;
-  if (aiCurrentAudio) { aiCurrentAudio.pause(); aiCurrentAudio.onended = null; aiCurrentAudio = null; }
-  if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; }
-  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
-  listenParaIdx = Math.max(0, listenParaIdx + delta);
-  speakParagraph();
-}
+document.getElementById('listen-skip-back').addEventListener('click', () => {
+  if (!N.active) return;
+  N.seq++;
+  N.busy = false;
+  if (N.audio) { try { N.audio.pause(); } catch(e){} N.audio.onended = null; N.audio = null; }
+  N.idx = Math.max(0, N.idx - 1);
+  nPlay();
+});
 
-function speakParagraph() {
-  if (!state.listening) return;
-  if (listenParaIdx >= listenPageParas.length) {
-    if (listenPageNum < state.totalPages) {
-      goToPage(listenPageNum + 1, false);
-      speakPage(listenPageNum + 1, 0);
-    } else {
-      showToast('Finished the book.');
-      stopListening();
-    }
-    return;
-  }
-  document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
-  const p = listenPageParas[listenParaIdx];
-  p.classList.add('speaking');
-  p.scrollIntoView({ behavior: 'smooth', block: 'center' });
+document.getElementById('listen-skip-fwd').addEventListener('click', () => {
+  if (!N.active) return;
+  N.seq++;
+  N.busy = false;
+  if (N.audio) { try { N.audio.pause(); } catch(e){} N.audio.onended = null; N.audio = null; }
+  N.idx++;
+  nPlay();
+});
 
-  const onEnd = () => {
-    if (!state.listening) return;
-    recordPageRead();
-    listenParaIdx++;
-    speakParagraph();
-  };
-
-  if (hasOpenAIKey()) {
-    // Use OpenAI TTS
-    const paraObj = aiPageParas[listenParaIdx] || { text: p.textContent };
-    const play = (audio) => {
-      if (!audio || !state.listening) { onEnd(); return; }
-      aiCurrentAudio = audio;
-      audio.playbackRate = state.speechRate;
-      audio.onended = onEnd;
-      audio.onerror = onEnd;
-      audio.play().catch(onEnd);
-      updateListenPlayIcon();
-      // Preload next
-      preloadNext(aiPageParas, listenParaIdx + 1);
-    };
-    if (paraObj._audio) { play(paraObj._audio); }
-    else {
-      fetchOpenAIAudio(paraObj.text).then(play);
-    }
-  } else {
-    // Browser TTS fallback
-    const utter = new SpeechSynthesisUtterance(p.textContent);
-    utter.rate = state.speechRate;
-    const sel = document.getElementById('listen-voice');
-    if (sel && sel.value) {
-      const v = synthVoices.find(v => v.voiceURI === sel.value);
-      if (v) utter.voice = v;
-    }
-    utter.onend = onEnd;
-    utter.onerror = onEnd;
-    currentUtterance = utter;
-    window.speechSynthesis.speak(utter);
-    updateListenPlayIcon();
-  }
-}
-
-async function speakPage(pageNum, startIdx) {
-  const wrap = await ensureReflowPageRendered(pageNum);
-  if (!wrap || !state.listening) return;
-  const paras = [...wrap.querySelectorAll('p')].filter(p => !p.classList.contains('reflow-empty'));
-  listenPageParas = paras; listenPageNum = pageNum; listenParaIdx = startIdx || 0;
-  // Build aiPageParas with text
-  aiPageParas = paras.map(p => ({ text: p.textContent }));
-  if (!paras.length) {
-    if (pageNum < state.totalPages && state.listening) { goToPage(pageNum + 1, false); speakPage(pageNum + 1, 0); }
-    else stopListening();
-    return;
-  }
-  // Preload first two paragraphs if OpenAI key set
-  if (hasOpenAIKey()) {
-    preloadNext(aiPageParas, listenParaIdx);
-    preloadNext(aiPageParas, listenParaIdx + 1);
-  }
-  speakParagraph();
-}
-
-els.btnListen.addEventListener('click', () => { state.listening ? stopListening() : startListening(); });
-document.getElementById('listen-playpause').addEventListener('click', togglePlayPause);
-document.getElementById('listen-skip-back').addEventListener('click', () => skipParagraph(-1));
-document.getElementById('listen-skip-fwd').addEventListener('click', () => skipParagraph(1));
-document.getElementById('listen-close').addEventListener('click', stopListening);
-document.getElementById('listen-voice').addEventListener('change', (e) => localStorage.setItem('folio:voiceURI', e.target.value));
+document.getElementById('listen-close').addEventListener('click', nStop);
+document.getElementById('listen-voice').addEventListener('change', (e) => {
+  localStorage.setItem('folio:openai-voice', e.target.value);
+});
 document.getElementById('listen-speed').addEventListener('click', () => {
   const idx = (SPEEDS.indexOf(state.speechRate) + 1) % SPEEDS.length;
   state.speechRate = SPEEDS[idx];
+  if (N.audio) N.audio.playbackRate = state.speechRate;
   document.getElementById('listen-speed').textContent = state.speechRate + 'x';
   localStorage.setItem('folio:speechRate', state.speechRate);
 });
 document.getElementById('listen-speed').textContent = state.speechRate + 'x';
+
+// ── Narration picker (chapter selection) ──────────────────────
+async function openNarrationPicker() {
+  // Build chapter list from TOC, fall back to page ranges
+  let items = [{ label: 'Current page', page: state.currentPage, sub: `Page ${state.currentPage}` }];
+  try {
+    const outline = await state.pdfDoc.getOutline();
+    if (outline && outline.length) {
+      for (const item of outline.slice(0, 20)) {
+        try {
+          let dest = item.dest;
+          if (typeof dest === 'string') dest = await state.pdfDoc.getDestination(dest);
+          if (dest) {
+            const pageIdx = await state.pdfDoc.getPageIndex(dest[0]);
+            items.push({ label: item.title, page: pageIdx + 1, sub: `Page ${pageIdx + 1}` });
+          }
+        } catch(e) {}
+      }
+    }
+  } catch(e) {}
+
+  // Build modal
+  let existing = document.getElementById('narration-picker');
+  if (existing) existing.remove();
+
+  const modal = document.createElement('div');
+  modal.id = 'narration-picker';
+  modal.style.cssText = `position:fixed;inset:0;z-index:95;background:rgba(0,0,0,0.65);backdrop-filter:blur(20px);display:flex;align-items:flex-end;justify-content:center;`;
+
+  const panel = document.createElement('div');
+  panel.style.cssText = `background:#18160f;border:1px solid rgba(200,165,106,0.12);border-radius:22px 22px 0 0;width:100%;max-width:540px;max-height:72dvh;display:flex;flex-direction:column;box-shadow:0 -24px 80px rgba(0,0,0,0.6);animation:sheetUp 0.3s cubic-bezier(0.25,1,0.5,1) both;padding-bottom:calc(env(safe-area-inset-bottom) + 8px);`;
+
+  panel.innerHTML = `
+    <div style="padding:20px 22px 14px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid rgba(200,165,106,0.1);flex-shrink:0;">
+      <div>
+        <div style="font-family:'Fraunces',serif;font-size:18px;color:#f2e8d2;">Start narration</div>
+        <div style="font-size:12px;color:rgba(242,232,210,0.4);margin-top:2px;">Choose where to begin</div>
+      </div>
+      <button id="np-close" style="background:none;border:none;color:rgba(242,232,210,0.5);font-size:22px;cursor:pointer;padding:4px 8px;">✕</button>
+    </div>
+    <div id="np-list" style="overflow-y:auto;flex:1;padding:8px 14px 12px;display:flex;flex-direction:column;gap:6px;"></div>`;
+
+  const list = panel.querySelector('#np-list');
+  items.forEach(item => {
+    const btn = document.createElement('button');
+    btn.style.cssText = `background:rgba(200,165,106,0.07);border:1px solid rgba(200,165,106,0.14);border-radius:14px;padding:14px 16px;text-align:left;cursor:pointer;display:flex;justify-content:space-between;align-items:center;touch-action:manipulation;transition:background 0.12s;`;
+    btn.innerHTML = `<span style="font-size:14px;color:#f2e8d2;font-family:-apple-system,sans-serif;max-width:80%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${escapeHtml(item.label)}</span><span style="font-size:11px;color:rgba(200,165,106,0.7);flex-shrink:0;">${item.sub}</span>`;
+    btn.addEventListener('touchstart', () => btn.style.background = 'rgba(200,165,106,0.18)', { passive:true });
+    btn.addEventListener('touchend', () => btn.style.background = 'rgba(200,165,106,0.07)', { passive:true });
+    btn.addEventListener('click', () => {
+      modal.remove();
+      nStart(item.page);
+    });
+    list.appendChild(btn);
+  });
+
+  modal.appendChild(panel);
+  document.getElementById('app').appendChild(modal);
+  panel.querySelector('#np-close').addEventListener('click', () => modal.remove());
+  modal.addEventListener('click', e => { if (e.target === modal) modal.remove(); });
+}
 
 function updateProgressUI() {
   els.piCurrent.textContent = state.currentPage;
@@ -1761,7 +1851,7 @@ function applyModeUI() {
     state.spreadOn = false;
     els.spread.classList.add('single-mode');
   }
-  stopListening();
+  nStop();
 }
 
 els.btnSpread.addEventListener('click', () => {
@@ -2248,13 +2338,6 @@ async function gistPull() {
 setInterval(() => { if (state.pdfDoc) { gistPush(); } }, 3 * 60 * 1000);
 
 // ---------------- OpenAI TTS engine ----------------
-let aiAudioQueue = []; // {text, audio?}
-let aiCurrentAudio = null;
-let aiParaIdx = 0;
-let aiPageParas = [];
-let aiPageNum = null;
-let aiPlaying = false;
-const OPENAI_VOICES = ['onyx','nova','shimmer','alloy','echo','fable'];
 
 // ── Narrator profile (book-level, cached per book) ──────────────────
 let narratorProfile = null; // active profile for current book
@@ -2365,15 +2448,6 @@ async function fetchOpenAIAudio(text, overrideInstructions) {
 }
 
 // Preload next paragraph while current plays
-async function preloadNext(paras, idx) {
-  if (!hasOpenAIKey()) return;
-  const next = paras[idx];
-  if (next && !next._audio && !next._loading) {
-    next._loading = true;
-    next._audio = await fetchOpenAIAudio(next.text);
-  }
-}
-
 // ---------------- Init ----------------
 async function init() {
   // Set default voice if not set
