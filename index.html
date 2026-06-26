@@ -155,6 +155,71 @@
   /* drag-over highlight */
   #library-screen.drag-over { outline: 2px dashed var(--brass-bright); outline-offset: -10px; }
 
+  /* stats bar */
+  #lib-stats-bar { display: flex; gap: 10px; align-items: center; margin-top: 2px; flex-wrap: wrap; }
+  #lib-stats-bar span { font-size: 12px; color: var(--chrome-text-dim); }
+  #stat-streak { color: var(--brass-bright); font-weight: 600; }
+  #stat-sync { color: rgba(90,107,79,0.8); font-size: 11px; }
+  #lib-settings-btn {
+    background: transparent; border: 1px solid rgba(180,138,79,0.25); color: var(--chrome-text-dim);
+    width: 38px; height: 38px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; touch-action: manipulation; flex-shrink: 0;
+  }
+  #lib-settings-btn:active { background: rgba(180,138,79,0.15); color: var(--brass-bright); }
+  #lib-settings-btn svg { width: 17px; height: 17px; }
+
+  /* settings modal */
+  #settings-modal {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 80;
+    display: flex; align-items: flex-end; justify-content: center;
+    backdrop-filter: blur(4px);
+  }
+  #settings-modal[hidden] { display: none; }
+  #settings-panel {
+    background: #1a1710; border: 1px solid rgba(180,138,79,0.2);
+    border-radius: 18px 18px 0 0; width: 100%; max-width: 540px;
+    padding: 0 0 calc(env(safe-area-inset-bottom) + 20px);
+    max-height: 88dvh; overflow-y: auto;
+  }
+  #settings-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 18px 20px 14px; border-bottom: 1px solid rgba(180,138,79,0.12);
+    font-family: 'Fraunces', serif; font-size: 17px; color: var(--chrome-text);
+    position: sticky; top: 0; background: #1a1710; z-index: 2;
+  }
+  .settings-section {
+    padding: 18px 20px; border-bottom: 1px solid rgba(180,138,79,0.08);
+  }
+  .settings-label { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass); margin-bottom: 10px; }
+  .settings-row { display: flex; gap: 8px; margin-bottom: 8px; }
+  .settings-input {
+    flex: 1; background: rgba(180,138,79,0.07); border: 1px solid rgba(180,138,79,0.2);
+    color: var(--chrome-text); font-size: 13px; padding: 9px 12px; border-radius: 8px;
+    font-family: 'Inter', sans-serif; min-width: 0;
+  }
+  .settings-input:focus { outline: none; border-color: var(--brass); }
+  .settings-btn {
+    background: rgba(180,138,79,0.15); border: 1px solid rgba(180,138,79,0.3);
+    color: var(--brass-bright); font-size: 12.5px; padding: 9px 14px;
+    border-radius: 8px; cursor: pointer; white-space: nowrap; font-family: 'Inter', sans-serif;
+    touch-action: manipulation;
+  }
+  .settings-btn:active { background: rgba(180,138,79,0.3); }
+  .settings-select {
+    width: 100%; background: rgba(180,138,79,0.07); border: 1px solid rgba(180,138,79,0.2);
+    color: var(--chrome-text); font-size: 13px; padding: 9px 12px; border-radius: 8px;
+    font-family: 'Inter', sans-serif; margin-bottom: 8px;
+  }
+  .settings-note { font-size: 11.5px; color: var(--chrome-text-dim); line-height: 1.5; }
+  .settings-note b { color: var(--brass-bright); }
+
+  /* stats grid */
+  #stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-top: 4px; }
+  @media (max-width: 380px) { #stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat-box { background: rgba(180,138,79,0.08); border-radius: 10px; padding: 14px 10px; text-align: center; }
+  .stat-num { font-family: 'Fraunces', serif; font-size: 24px; color: var(--brass-bright); font-weight: 500; }
+  .stat-lbl { font-size: 10px; color: var(--chrome-text-dim); margin-top: 2px; letter-spacing: 0.04em; }
+
   /* ---------- Book shell ---------- */
   #book {
     width: 100%; height: 100%;
@@ -371,11 +436,23 @@
 
   <div id="library-screen">
     <div id="lib-header">
-      <h1 id="lib-title">Folio</h1>
-      <button id="lib-add-btn" title="Add a book">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
-        Add Book
-      </button>
+      <div>
+        <h1 id="lib-title">Folio</h1>
+        <div id="lib-stats-bar">
+          <span id="stat-streak">🔥 —</span>
+          <span id="stat-today">— pages today</span>
+          <span id="stat-sync"></span>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button id="lib-settings-btn" title="Settings">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-2 2 2 2 0 01-2-2v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 01-2-2 2 2 0 012-2h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 012-2 2 2 0 012 2v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 012 2 2 2 0 01-2 2h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        </button>
+        <button id="lib-add-btn" title="Add a book">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+          Add Book
+        </button>
+      </div>
     </div>
     <div id="lib-grid"></div>
     <div id="lib-empty">
@@ -384,6 +461,58 @@
       </div>
       <p>Your library is empty</p>
       <span>Tap Add Book to get started</span>
+    </div>
+  </div>
+
+  <!-- Settings modal -->
+  <div id="settings-modal" hidden>
+    <div id="settings-panel">
+      <div id="settings-header">
+        <span>Settings</span>
+        <button id="settings-close" class="icon-btn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">AI Voice (OpenAI)</div>
+        <div class="settings-row">
+          <input id="set-openai-key" type="password" placeholder="sk-..." class="settings-input" autocomplete="off" />
+          <button id="set-openai-save" class="settings-btn">Save</button>
+        </div>
+        <select id="set-openai-voice" class="settings-select">
+          <option value="onyx">Onyx — deep, authoritative</option>
+          <option value="nova">Nova — warm, clear</option>
+          <option value="shimmer">Shimmer — gentle, expressive</option>
+          <option value="alloy">Alloy — neutral, balanced</option>
+          <option value="echo">Echo — crisp, conversational</option>
+          <option value="fable">Fable — rich, dramatic</option>
+        </select>
+        <div class="settings-note">Uses your OpenAI account. Falls back to device voice if not set.</div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Sync across devices (GitHub Gist)</div>
+        <div class="settings-row">
+          <input id="set-gist-token" type="password" placeholder="ghp_... (gist scope only)" class="settings-input" autocomplete="off" />
+          <button id="set-gist-save" class="settings-btn">Save</button>
+        </div>
+        <div id="set-gist-id-row" class="settings-row" style="display:none">
+          <input id="set-gist-id" type="text" placeholder="Gist ID (auto-created)" class="settings-input" readonly />
+          <button id="set-sync-now" class="settings-btn">Sync now</button>
+        </div>
+        <div class="settings-note">Create a token at github.com/settings/tokens with <b>gist</b> scope only. Progress syncs automatically between devices.</div>
+      </div>
+
+      <div class="settings-section">
+        <div class="settings-label">Reading stats</div>
+        <div id="stats-grid">
+          <div class="stat-box"><div class="stat-num" id="st-streak">—</div><div class="stat-lbl">day streak</div></div>
+          <div class="stat-box"><div class="stat-num" id="st-today">—</div><div class="stat-lbl">pages today</div></div>
+          <div class="stat-box"><div class="stat-num" id="st-total">—</div><div class="stat-lbl">pages all time</div></div>
+          <div class="stat-box"><div class="stat-num" id="st-time">—</div><div class="stat-lbl">hours read</div></div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -642,6 +771,9 @@ async function saveProgress() {
     id: state.bookId, name: state.fileName, totalPages: state.totalPages,
     lastPage: state.currentPage, lastOpened: Date.now()
   });
+  recordPageRead();
+  refreshStatsUI();
+  gistPush(); // async, non-blocking
 }
 async function loadProgress(id) {
   try {
@@ -1076,12 +1208,51 @@ function updateListenPlayIcon() {
 function stopListening() {
   const wasListening = state.listening;
   state.listening = false;
+  if (aiCurrentAudio) { aiCurrentAudio.pause(); aiCurrentAudio.onended = null; aiCurrentAudio = null; }
   if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; currentUtterance = null; }
   if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  aiPageParas = [];
   document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
   if (els.listenBar) els.listenBar.hidden = true;
   if (els.btnListen) els.btnListen.classList.remove('active');
-  if (wasListening) updateListenPlayIcon();
+  if (wasListening) { updateListenPlayIcon(); endReadingSession(); }
+}
+
+async function startListening() {
+  if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); }
+  if (hasOpenAIKey()) {
+    showToast('Using OpenAI voice…');
+  } else if (!('speechSynthesis' in window)) {
+    showToast('No TTS available — add OpenAI key in settings'); return;
+  }
+  els.listenBar.hidden = false;
+  els.btnListen.classList.add('active');
+  state.listening = true;
+  startReadingSession();
+  await speakPage(state.currentPage, 0);
+}
+
+function togglePlayPause() {
+  if (!state.listening) { startListening(); return; }
+  if (hasOpenAIKey()) {
+    if (aiCurrentAudio) {
+      if (aiCurrentAudio.paused) aiCurrentAudio.play();
+      else aiCurrentAudio.pause();
+    }
+  } else {
+    if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) window.speechSynthesis.pause();
+    else if (window.speechSynthesis.paused) window.speechSynthesis.resume();
+  }
+  setTimeout(updateListenPlayIcon, 60);
+}
+
+function skipParagraph(delta) {
+  if (!state.listening) return;
+  if (aiCurrentAudio) { aiCurrentAudio.pause(); aiCurrentAudio.onended = null; aiCurrentAudio = null; }
+  if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; }
+  if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+  listenParaIdx = Math.max(0, listenParaIdx + delta);
+  speakParagraph();
 }
 
 function speakParagraph() {
@@ -1100,18 +1271,47 @@ function speakParagraph() {
   const p = listenPageParas[listenParaIdx];
   p.classList.add('speaking');
   p.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  const utter = new SpeechSynthesisUtterance(p.textContent);
-  utter.rate = state.speechRate;
-  const sel = document.getElementById('listen-voice');
-  if (sel && sel.value) {
-    const v = synthVoices.find(v => v.voiceURI === sel.value);
-    if (v) utter.voice = v;
+
+  const onEnd = () => {
+    if (!state.listening) return;
+    recordPageRead();
+    listenParaIdx++;
+    speakParagraph();
+  };
+
+  if (hasOpenAIKey()) {
+    // Use OpenAI TTS
+    const paraObj = aiPageParas[listenParaIdx] || { text: p.textContent };
+    const play = (audio) => {
+      if (!audio || !state.listening) { onEnd(); return; }
+      aiCurrentAudio = audio;
+      audio.playbackRate = state.speechRate;
+      audio.onended = onEnd;
+      audio.onerror = onEnd;
+      audio.play().catch(onEnd);
+      updateListenPlayIcon();
+      // Preload next
+      preloadNext(aiPageParas, listenParaIdx + 1);
+    };
+    if (paraObj._audio) { play(paraObj._audio); }
+    else {
+      fetchOpenAIAudio(paraObj.text).then(play);
+    }
+  } else {
+    // Browser TTS fallback
+    const utter = new SpeechSynthesisUtterance(p.textContent);
+    utter.rate = state.speechRate;
+    const sel = document.getElementById('listen-voice');
+    if (sel && sel.value) {
+      const v = synthVoices.find(v => v.voiceURI === sel.value);
+      if (v) utter.voice = v;
+    }
+    utter.onend = onEnd;
+    utter.onerror = onEnd;
+    currentUtterance = utter;
+    window.speechSynthesis.speak(utter);
+    updateListenPlayIcon();
   }
-  utter.onend = () => { if (!state.listening) return; listenParaIdx++; speakParagraph(); };
-  utter.onerror = () => { if (!state.listening) return; listenParaIdx++; speakParagraph(); };
-  currentUtterance = utter;
-  window.speechSynthesis.speak(utter);
-  updateListenPlayIcon();
 }
 
 async function speakPage(pageNum, startIdx) {
@@ -1119,35 +1319,18 @@ async function speakPage(pageNum, startIdx) {
   if (!wrap || !state.listening) return;
   const paras = [...wrap.querySelectorAll('p')].filter(p => !p.classList.contains('reflow-empty'));
   listenPageParas = paras; listenPageNum = pageNum; listenParaIdx = startIdx || 0;
+  // Build aiPageParas with text
+  aiPageParas = paras.map(p => ({ text: p.textContent }));
   if (!paras.length) {
     if (pageNum < state.totalPages && state.listening) { goToPage(pageNum + 1, false); speakPage(pageNum + 1, 0); }
     else stopListening();
     return;
   }
-  speakParagraph();
-}
-
-async function startListening() {
-  if (!('speechSynthesis' in window)) { showToast('Text-to-speech isn\'t supported in this browser.'); return; }
-  if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); }
-  els.listenBar.hidden = false;
-  els.btnListen.classList.add('active');
-  state.listening = true;
-  await speakPage(state.currentPage, 0);
-}
-
-function togglePlayPause() {
-  if (!state.listening) { startListening(); return; }
-  if (window.speechSynthesis.speaking && !window.speechSynthesis.paused) window.speechSynthesis.pause();
-  else if (window.speechSynthesis.paused) window.speechSynthesis.resume();
-  setTimeout(updateListenPlayIcon, 60);
-}
-
-function skipParagraph(delta) {
-  if (!state.listening) return;
-  if (currentUtterance) { currentUtterance.onend = null; currentUtterance.onerror = null; }
-  window.speechSynthesis.cancel();
-  listenParaIdx = Math.max(0, listenParaIdx + delta);
+  // Preload first two paragraphs if OpenAI key set
+  if (hasOpenAIKey()) {
+    preloadNext(aiPageParas, listenParaIdx);
+    preloadNext(aiPageParas, listenParaIdx + 1);
+  }
   speakParagraph();
 }
 
@@ -1417,9 +1600,233 @@ window.addEventListener('resize', () => {
   }, 200);
 });
 
+// ---------------- Settings UI ----------------
+const settingsModal = document.getElementById('settings-modal');
+document.getElementById('lib-settings-btn').addEventListener('click', () => {
+  settingsModal.hidden = false;
+  // Load stored values
+  const oKey = localStorage.getItem('folio:openai-key') || '';
+  document.getElementById('set-openai-key').value = oKey ? '••••••••' : '';
+  document.getElementById('set-openai-voice').value = localStorage.getItem('folio:openai-voice') || 'onyx';
+  const gToken = localStorage.getItem('folio:gist-token') || '';
+  document.getElementById('set-gist-token').value = gToken ? '••••••••' : '';
+  const gId = localStorage.getItem('folio:gist-id') || '';
+  document.getElementById('set-gist-id').value = gId;
+  document.getElementById('set-gist-id-row').style.display = gToken ? 'flex' : 'none';
+  refreshStatsUI();
+});
+document.getElementById('settings-close').addEventListener('click', () => settingsModal.hidden = true);
+settingsModal.addEventListener('click', e => { if (e.target === settingsModal) settingsModal.hidden = true; });
+
+document.getElementById('set-openai-save').addEventListener('click', () => {
+  const val = document.getElementById('set-openai-key').value.trim();
+  if (val && !val.startsWith('•')) localStorage.setItem('folio:openai-key', val);
+  localStorage.setItem('folio:openai-voice', document.getElementById('set-openai-voice').value);
+  showToast('OpenAI voice settings saved');
+});
+document.getElementById('set-openai-voice').addEventListener('change', () => {
+  localStorage.setItem('folio:openai-voice', document.getElementById('set-openai-voice').value);
+});
+document.getElementById('set-gist-save').addEventListener('click', async () => {
+  const val = document.getElementById('set-gist-token').value.trim();
+  if (val && !val.startsWith('•')) {
+    localStorage.setItem('folio:gist-token', val);
+    showToast('Connecting to GitHub Gist…');
+    await ensureGist();
+    document.getElementById('set-gist-id-row').style.display = 'flex';
+    document.getElementById('set-gist-id').value = localStorage.getItem('folio:gist-id') || '';
+    showToast('Sync enabled ✓');
+  }
+});
+document.getElementById('set-sync-now').addEventListener('click', async () => {
+  showToast('Syncing…');
+  await gistPush();
+  await gistPull();
+  showToast('Synced ✓');
+});
+
+// ---------------- Stats tracking ----------------
+function todayKey() { return new Date().toISOString().slice(0, 10); }
+function getStats() {
+  try { return JSON.parse(localStorage.getItem('folio:stats') || '{}'); } catch { return {}; }
+}
+function saveStats(s) { localStorage.setItem('folio:stats', JSON.stringify(s)); }
+
+function recordPageRead() {
+  const s = getStats();
+  const today = todayKey();
+  if (!s.days) s.days = {};
+  s.days[today] = (s.days[today] || 0) + 1;
+  if (!s.total) s.total = 0; s.total++;
+  if (!s.timeMs) s.timeMs = 0;
+  saveStats(s);
+}
+let sessionStart = null;
+function startReadingSession() { sessionStart = Date.now(); }
+function endReadingSession() {
+  if (!sessionStart) return;
+  const ms = Date.now() - sessionStart;
+  sessionStart = null;
+  const s = getStats(); s.timeMs = (s.timeMs || 0) + ms; saveStats(s);
+}
+
+function calcStreak() {
+  const s = getStats(); if (!s.days) return 0;
+  let streak = 0; const d = new Date();
+  while (true) {
+    const k = d.toISOString().slice(0, 10);
+    if (!s.days[k]) break;
+    streak++; d.setDate(d.getDate() - 1);
+  }
+  return streak;
+}
+function refreshStatsUI() {
+  const s = getStats();
+  const today = todayKey();
+  const todayPages = (s.days || {})[today] || 0;
+  const streak = calcStreak();
+  const totalPages = s.total || 0;
+  const hours = Math.round((s.timeMs || 0) / 3600000 * 10) / 10;
+  document.getElementById('stat-streak').textContent = streak > 0 ? `🔥 ${streak}d streak` : '🔥 Start today';
+  document.getElementById('stat-today').textContent = `${todayPages} pages today`;
+  if (document.getElementById('st-streak')) {
+    document.getElementById('st-streak').textContent = streak;
+    document.getElementById('st-today').textContent = todayPages;
+    document.getElementById('st-total').textContent = totalPages;
+    document.getElementById('st-time').textContent = hours;
+  }
+}
+
+// ---------------- GitHub Gist sync ----------------
+async function ensureGist() {
+  const token = localStorage.getItem('folio:gist-token');
+  if (!token) return null;
+  let gistId = localStorage.getItem('folio:gist-id');
+  if (gistId) return gistId;
+  // Create a new private gist
+  try {
+    const res = await fetch('https://api.github.com/gists', {
+      method: 'POST',
+      headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ description: 'Folio reading sync', public: false, files: { 'folio-sync.json': { content: '{}' } } })
+    });
+    const data = await res.json();
+    if (data.id) { localStorage.setItem('folio:gist-id', data.id); return data.id; }
+  } catch (e) { console.warn('Gist create failed', e); }
+  return null;
+}
+
+async function gistPush() {
+  const token = localStorage.getItem('folio:gist-token');
+  const gistId = await ensureGist();
+  if (!token || !gistId) return;
+  try {
+    // Collect all progress + stats
+    const payload = { stats: getStats(), progress: {}, updatedAt: Date.now(), device: navigator.userAgent.includes('iPad') ? 'iPad' : 'iPhone' };
+    const lib = await loadLibrary();
+    lib.forEach(b => {
+      const p = localStorage.getItem('folio:book:' + b.id);
+      if (p) payload.progress[b.id] = JSON.parse(p);
+    });
+    await fetch('https://api.github.com/gists/' + gistId, {
+      method: 'PATCH',
+      headers: { 'Authorization': 'token ' + token, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ files: { 'folio-sync.json': { content: JSON.stringify(payload) } } })
+    });
+    const ago = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    localStorage.setItem('folio:last-sync', ago);
+    const el = document.getElementById('stat-sync');
+    if (el) el.textContent = '⇅ ' + ago;
+  } catch (e) { console.warn('Gist push failed', e); }
+}
+
+async function gistPull() {
+  const token = localStorage.getItem('folio:gist-token');
+  const gistId = localStorage.getItem('folio:gist-id');
+  if (!token || !gistId) return;
+  try {
+    const res = await fetch('https://api.github.com/gists/' + gistId, {
+      headers: { 'Authorization': 'token ' + token }
+    });
+    const data = await res.json();
+    const content = data.files?.['folio-sync.json']?.content;
+    if (!content) return;
+    const remote = JSON.parse(content);
+    // Merge stats (take max of each day)
+    if (remote.stats) {
+      const local = getStats();
+      const merged = { ...remote.stats };
+      merged.days = { ...(remote.stats.days || {}), ...(local.days || {}) };
+      Object.keys(local.days || {}).forEach(k => {
+        merged.days[k] = Math.max(merged.days[k] || 0, (local.days || {})[k] || 0);
+      });
+      merged.total = Math.max(remote.stats.total || 0, local.total || 0);
+      merged.timeMs = (remote.stats.timeMs || 0) + (local.timeMs || 0);
+      saveStats(merged);
+    }
+    // Merge progress: take remote if page is further
+    if (remote.progress) {
+      Object.entries(remote.progress).forEach(([id, prog]) => {
+        const localStr = localStorage.getItem('folio:book:' + id);
+        const local = localStr ? JSON.parse(localStr) : null;
+        if (!local || (prog.page > local.page)) {
+          localStorage.setItem('folio:book:' + id, JSON.stringify(prog));
+        }
+      });
+    }
+    const ago = document.getElementById('stat-sync');
+    if (ago) ago.textContent = '⇅ synced';
+    refreshStatsUI();
+  } catch (e) { console.warn('Gist pull failed', e); }
+}
+
+// Auto-sync every 3 minutes while reading
+setInterval(() => { if (state.pdfDoc) { gistPush(); } }, 3 * 60 * 1000);
+
+// ---------------- OpenAI TTS engine ----------------
+let aiAudioQueue = []; // {text, audio?}
+let aiCurrentAudio = null;
+let aiParaIdx = 0;
+let aiPageParas = [];
+let aiPageNum = null;
+let aiPlaying = false;
+const OPENAI_VOICES = ['onyx','nova','shimmer','alloy','echo','fable'];
+
+async function fetchOpenAIAudio(text) {
+  const key = localStorage.getItem('folio:openai-key');
+  if (!key) return null;
+  const voice = localStorage.getItem('folio:openai-voice') || 'onyx';
+  try {
+    const res = await fetch('https://api.openai.com/v1/audio/speech', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model: 'tts-1', input: text.slice(0, 4096), voice })
+    });
+    if (!res.ok) { console.warn('OpenAI TTS error', res.status); return null; }
+    const blob = await res.blob();
+    return new Audio(URL.createObjectURL(blob));
+  } catch (e) { console.warn('OpenAI TTS fetch failed', e); return null; }
+}
+
+function hasOpenAIKey() { return !!localStorage.getItem('folio:openai-key'); }
+
+// Preload next paragraph's audio while current is playing
+async function preloadNext(paras, idx) {
+  if (!hasOpenAIKey()) return;
+  const next = paras[idx];
+  if (next && !next._audio && !next._loading) {
+    next._loading = true;
+    next._audio = await fetchOpenAIAudio(next.text);
+  }
+}
+
 // ---------------- Init ----------------
 async function init() {
   await renderLibraryScreen();
+  refreshStatsUI();
+  // Pull sync from Gist
+  await gistPull();
+  refreshStatsUI();
   // Auto-reopen the last book if cached in IDB
   const lib = await loadLibrary();
   if (lib.length) {
