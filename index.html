@@ -564,6 +564,67 @@
   @media (max-width: 420px) { #listen-bar select { max-width: 72px; } }
 
   /* ══════════════════════════════════════
+     EXPORT MODAL
+     ══════════════════════════════════════ */
+  #export-modal {
+    position: fixed; inset: 0; z-index: 90;
+    background: rgba(0,0,0,0.65); backdrop-filter: blur(20px) saturate(0.8);
+    display: flex; align-items: flex-end; justify-content: center;
+  }
+  #export-modal[hidden] { display: none; }
+  #export-panel {
+    background: var(--bg-sheet); border: 1px solid rgba(242,232,210,0.08);
+    border-radius: 22px 22px 0 0; width: 100%; max-width: 520px;
+    padding: 0 0 calc(env(safe-area-inset-bottom) + 24px);
+    box-shadow: 0 -24px 80px rgba(0,0,0,0.6);
+    animation: sheetUp 0.35s var(--spring-soft) both;
+  }
+  @keyframes sheetUp { from { transform: translateY(60px); opacity: 0; } to { transform: none; opacity: 1; } }
+  #export-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 20px 22px 0;
+    font-family: 'Fraunces', serif; font-size: 18px; color: var(--text-1);
+    position: relative;
+  }
+  #export-header::before {
+    content: ""; position: absolute; top: 10px; left: 50%; transform: translateX(-50%);
+    width: 36px; height: 4px; border-radius: 2px; background: rgba(242,232,210,0.18);
+  }
+  #export-body { padding: 16px 22px 4px; display: flex; flex-direction: column; gap: 14px; }
+  .export-desc { font-size: 13.5px; color: var(--text-2); line-height: 1.55; }
+  .export-range-row { display: flex; gap: 12px; }
+  .export-field { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+  .export-field label { font-size: 11px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--gold); }
+  #export-estimate {
+    font-size: 13px; color: var(--text-3); text-align: center;
+    padding: 6px 0; letter-spacing: 0.01em;
+  }
+  #export-start-btn {
+    background: var(--gold); color: #0d0b06;
+    border: none; border-radius: var(--r-pill); padding: 14px 24px;
+    font-size: 15px; font-weight: 700; cursor: pointer;
+    display: flex; align-items: center; justify-content: center; gap: 8px;
+    touch-action: manipulation;
+    box-shadow: 0 6px 24px rgba(200,165,106,0.35);
+    transition: transform 0.12s var(--spring), background 0.15s;
+    letter-spacing: -0.01em;
+  }
+  #export-start-btn svg { width: 18px; height: 18px; }
+  #export-start-btn:active { transform: scale(0.96); background: var(--gold-bright); }
+  #export-start-btn:disabled { opacity: 0.5; pointer-events: none; }
+  #export-progress { display: flex; flex-direction: column; gap: 10px; }
+  #export-progress[hidden] { display: none; }
+  #export-progress-bar {
+    height: 4px; background: rgba(242,232,210,0.1); border-radius: 2px; overflow: hidden;
+  }
+  #export-progress-fill {
+    height: 100%; width: 0%; border-radius: 2px;
+    background: linear-gradient(90deg, var(--green), var(--gold-bright));
+    transition: width 0.4s var(--ease-out);
+  }
+  #export-progress-label { font-size: 12.5px; color: var(--text-2); text-align: center; }
+
+  /* ══════════════════════════════════════
      DROP VEIL + TOAST
      ══════════════════════════════════════ */
   #drop-veil {
@@ -754,9 +815,46 @@
       </button>
       <select id="listen-voice" title="Voice"></select>
       <button id="listen-speed" title="Speed">1x</button>
+      <button class="icon-btn" id="listen-export" title="Download audio for offline">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+      </button>
       <button class="icon-btn" id="listen-close" title="Stop listening">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
       </button>
+    </div>
+
+    <!-- Export audio modal -->
+    <div id="export-modal" hidden>
+      <div id="export-panel">
+        <div id="export-header">
+          <span>Download narration</span>
+          <button id="export-close" class="icon-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+          </button>
+        </div>
+        <div id="export-body">
+          <p class="export-desc">Generate an MP3 you can listen to anywhere — on a flight, offline, AirPods. Uses your OpenAI voice.</p>
+          <div class="export-range-row">
+            <div class="export-field">
+              <label>From page</label>
+              <input id="export-from" type="number" min="1" value="1" class="settings-input" />
+            </div>
+            <div class="export-field">
+              <label>To page</label>
+              <input id="export-to" type="number" min="1" value="10" class="settings-input" />
+            </div>
+          </div>
+          <div id="export-estimate">Estimated ~— min</div>
+          <button id="export-start-btn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Generate &amp; Download
+          </button>
+          <div id="export-progress" hidden>
+            <div id="export-progress-bar"><div id="export-progress-fill"></div></div>
+            <div id="export-progress-label">Generating…</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="zoom-pop">
@@ -1791,7 +1889,144 @@ window.addEventListener('resize', () => {
   }, 200);
 });
 
-// ---------------- Settings UI ----------------
+// ---------------- URL hash key setup ----------------
+// Visit #key=sk-... to auto-save OpenAI key without putting it in source
+(function() {
+  const hash = location.hash;
+  if (hash.startsWith('#key=')) {
+    const key = decodeURIComponent(hash.slice(5));
+    if (key.startsWith('sk-')) {
+      localStorage.setItem('folio:openai-key', key);
+      if (!localStorage.getItem('folio:openai-voice')) localStorage.setItem('folio:openai-voice', 'onyx');
+      history.replaceState(null, '', location.pathname);
+      // Show confirmation after app loads
+      window.addEventListener('load', () => setTimeout(() => showToast('OpenAI voice ready ✓'), 800));
+    }
+  }
+})();
+
+// ---------------- Export Audio (offline flight mode) ----------------
+let exportAborted = false;
+
+function openExportModal() {
+  const modal = document.getElementById('export-modal');
+  modal.hidden = false;
+  document.getElementById('export-from').value = state.currentPage;
+  document.getElementById('export-to').value = Math.min(state.currentPage + 14, state.totalPages);
+  document.getElementById('export-progress').hidden = true;
+  document.getElementById('export-start-btn').disabled = false;
+  document.getElementById('export-start-btn').textContent = '';
+  document.getElementById('export-start-btn').innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Generate & Download`;
+  updateExportEstimate();
+}
+
+function updateExportEstimate() {
+  const from = parseInt(document.getElementById('export-from').value) || 1;
+  const to = Math.min(parseInt(document.getElementById('export-to').value) || 10, state.totalPages);
+  const pages = Math.max(1, to - from + 1);
+  // ~250 words/page, ~150 words/min narration
+  const mins = Math.round(pages * 250 / 150);
+  document.getElementById('export-estimate').textContent = `~${pages} pages · about ${mins} min of audio`;
+}
+
+document.getElementById('export-from').addEventListener('input', updateExportEstimate);
+document.getElementById('export-to').addEventListener('input', updateExportEstimate);
+
+document.getElementById('export-close').addEventListener('click', () => {
+  exportAborted = true;
+  document.getElementById('export-modal').hidden = true;
+});
+document.getElementById('export-modal').addEventListener('click', e => {
+  if (e.target === document.getElementById('export-modal')) { exportAborted = true; document.getElementById('export-modal').hidden = true; }
+});
+document.getElementById('listen-export').addEventListener('click', openExportModal);
+
+document.getElementById('export-start-btn').addEventListener('click', async () => {
+  if (!hasOpenAIKey()) { showToast('Add your OpenAI key in Settings first'); return; }
+  const from = Math.max(1, parseInt(document.getElementById('export-from').value) || 1);
+  const to = Math.min(state.totalPages, parseInt(document.getElementById('export-to').value) || 10);
+  if (from > to) { showToast('From page must be less than To page'); return; }
+
+  exportAborted = false;
+  document.getElementById('export-start-btn').disabled = true;
+  document.getElementById('export-progress').hidden = false;
+  document.getElementById('export-progress-fill').style.width = '0%';
+  document.getElementById('export-progress-label').textContent = 'Extracting text…';
+
+  const key = localStorage.getItem('folio:openai-key');
+  const voice = localStorage.getItem('folio:openai-voice') || 'onyx';
+
+  // 1. Extract all text across page range
+  const allChunks = []; // {text}
+  for (let p = from; p <= to; p++) {
+    if (exportAborted) return;
+    document.getElementById('export-progress-label').textContent = `Reading page ${p} of ${to}…`;
+    const paras = await extractParagraphs(p);
+    paras.forEach(t => { if (t.trim().length > 10) allChunks.push(t.trim()); });
+  }
+
+  // 2. Batch chunks into ≤4000 char TTS requests
+  const batches = [];
+  let cur = '';
+  for (const chunk of allChunks) {
+    if ((cur + ' ' + chunk).length > 3800 && cur) { batches.push(cur.trim()); cur = chunk; }
+    else cur += (cur ? ' ' : '') + chunk;
+  }
+  if (cur.trim()) batches.push(cur.trim());
+
+  if (!batches.length) { showToast('No text found in those pages'); document.getElementById('export-progress').hidden = true; document.getElementById('export-start-btn').disabled = false; return; }
+
+  // 3. Generate audio for each batch (with concurrency limit of 3)
+  const audioBuffers = new Array(batches.length).fill(null);
+  let done = 0;
+
+  async function fetchBatch(i) {
+    if (exportAborted) return;
+    try {
+      const res = await fetch('https://api.openai.com/v1/audio/speech', {
+        method: 'POST',
+        headers: { 'Authorization': 'Bearer ' + key, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'tts-1-hd', input: batches[i], voice, response_format: 'mp3' })
+      });
+      if (!res.ok) throw new Error('TTS ' + res.status);
+      audioBuffers[i] = await res.arrayBuffer();
+    } catch (e) { audioBuffers[i] = new ArrayBuffer(0); }
+    done++;
+    const pct = Math.round((done / batches.length) * 100);
+    document.getElementById('export-progress-fill').style.width = pct + '%';
+    document.getElementById('export-progress-label').textContent = `Generating audio… ${done}/${batches.length} segments (${pct}%)`;
+  }
+
+  // Run up to 3 concurrent TTS requests
+  const CONCURRENCY = 3;
+  for (let i = 0; i < batches.length; i += CONCURRENCY) {
+    if (exportAborted) return;
+    await Promise.all(batches.slice(i, i + CONCURRENCY).map((_, j) => fetchBatch(i + j)));
+  }
+
+  if (exportAborted) return;
+
+  // 4. Concatenate all MP3 buffers
+  document.getElementById('export-progress-label').textContent = 'Assembling MP3…';
+  const totalBytes = audioBuffers.reduce((s, b) => s + (b ? b.byteLength : 0), 0);
+  const merged = new Uint8Array(totalBytes);
+  let offset = 0;
+  audioBuffers.forEach(b => { if (b && b.byteLength) { merged.set(new Uint8Array(b), offset); offset += b.byteLength; } });
+
+  // 5. Download
+  const blob = new Blob([merged], { type: 'audio/mpeg' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  const mins = Math.round((merged.byteLength / 1024 / 1024 / 1.6) * 8); // rough mp3 duration
+  a.href = url;
+  a.download = `${state.fileName} — p${from}-p${to}.mp3`;
+  a.click();
+  URL.revokeObjectURL(url);
+
+  document.getElementById('export-progress-label').textContent = '✓ Downloaded!';
+  document.getElementById('export-progress-fill').style.width = '100%';
+  setTimeout(() => { document.getElementById('export-modal').hidden = true; }, 1800);
+});
 const settingsModal = document.getElementById('settings-modal');
 document.getElementById('lib-settings-btn').addEventListener('click', () => {
   settingsModal.hidden = false;
