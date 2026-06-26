@@ -48,55 +48,112 @@
     color: var(--chrome-text);
   }
 
-  /* ---------- Empty state (closed book) ---------- */
-  #empty-state {
-    width: min(440px, 86vw);
-    aspect-ratio: 3 / 4;
-    background: linear-gradient(135deg, var(--leather) 0%, var(--leather-2) 100%);
-    border-radius: 6px 10px 10px 6px;
-    box-shadow:
-      0 30px 70px rgba(0,0,0,0.55),
-      inset 0 0 0 1px rgba(180,138,79,0.25),
-      inset -10px 0 18px rgba(0,0,0,0.4);
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 18px;
-    cursor: pointer;
-    position: relative;
-    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  /* ---------- Library screen ---------- */
+  #library-screen {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column;
+    padding: calc(env(safe-area-inset-top) + 16px) 0 calc(env(safe-area-inset-bottom) + 20px);
+    overflow: hidden;
   }
-  #empty-state::before {
-    content: "";
-    position: absolute; left: 22px; top: 18px; bottom: 18px; width: 1px;
-    background: linear-gradient(180deg, transparent, var(--brass), transparent);
-    opacity: 0.5;
-  }
-  #empty-state:hover { transform: translateY(-4px); box-shadow: 0 38px 80px rgba(0,0,0,0.6), inset 0 0 0 1px rgba(216,175,113,0.4); }
-  #empty-state.drag-over { outline: 2px dashed var(--brass-bright); outline-offset: -14px; }
-  #empty-state .clasp {
-    width: 46px; height: 46px; border-radius: 50%;
-    border: 1.5px solid var(--brass);
-    display: flex; align-items: center; justify-content: center;
-    color: var(--brass-bright);
-  }
-  #empty-state h1 {
-    font-family: 'Fraunces', serif; font-weight: 500; font-size: 26px;
-    margin: 0; letter-spacing: 0.01em; color: var(--chrome-text);
-  }
-  #empty-state p { margin: 0; font-size: 13px; color: var(--chrome-text-dim); text-align: center; max-width: 260px; line-height: 1.5; }
-  #empty-state .hint { font-size: 11px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--brass); margin-top: 4px; }
+  #library-screen[hidden] { display: none; }
 
-  #library-list {
-    margin-top: 6px; width: 100%; max-width: 280px; max-height: 110px; overflow-y: auto;
-    display: flex; flex-direction: column; gap: 4px; padding: 0 8px;
+  #lib-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 22px 18px;
+    flex-shrink: 0;
   }
-  #library-list button {
-    background: rgba(180,138,79,0.08); border: 1px solid rgba(180,138,79,0.25);
-    color: var(--chrome-text-dim); font-size: 11.5px; text-align: left;
-    padding: 6px 10px; border-radius: var(--r); cursor: pointer; font-family: 'Inter', sans-serif;
-    display: flex; justify-content: space-between; gap: 8px;
+  #lib-title {
+    font-family: 'Fraunces', serif; font-weight: 500; font-size: 28px;
+    margin: 0; color: var(--chrome-text); letter-spacing: 0.01em;
   }
-  #library-list button:hover { background: rgba(180,138,79,0.18); color: var(--chrome-text); }
-  #library-list button span.pct { color: var(--brass-bright); flex-shrink: 0; }
+  #lib-add-btn {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--brass); color: #1a1409;
+    border: none; border-radius: 20px; padding: 9px 16px;
+    font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600;
+    cursor: pointer; touch-action: manipulation;
+    box-shadow: 0 4px 14px rgba(180,138,79,0.35);
+    transition: background 0.15s, transform 0.1s;
+  }
+  #lib-add-btn:active { transform: scale(0.96); background: var(--brass-bright); }
+  #lib-add-btn svg { width: 16px; height: 16px; }
+
+  #lib-grid {
+    flex: 1; overflow-y: auto; -webkit-overflow-scrolling: touch;
+    padding: 4px 16px 20px;
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(148px, 1fr));
+    gap: 14px;
+    align-content: start;
+  }
+  @media (max-width: 400px) {
+    #lib-grid { grid-template-columns: repeat(2, 1fr); gap: 10px; }
+  }
+
+  .book-card {
+    background: linear-gradient(160deg, var(--leather) 0%, var(--leather-2) 100%);
+    border-radius: 6px 10px 10px 6px;
+    border: 1px solid rgba(180,138,79,0.2);
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4), inset -6px 0 10px rgba(0,0,0,0.3);
+    padding: 18px 14px 14px;
+    cursor: pointer; position: relative;
+    display: flex; flex-direction: column; gap: 8px;
+    min-height: 180px;
+    transition: transform 0.18s, box-shadow 0.18s;
+    touch-action: manipulation;
+  }
+  .book-card::before {
+    content: ""; position: absolute; left: 10px; top: 10px; bottom: 10px; width: 1px;
+    background: linear-gradient(180deg, transparent, rgba(180,138,79,0.5), transparent);
+  }
+  .book-card:active { transform: translateY(-3px); box-shadow: 0 14px 32px rgba(0,0,0,0.5); }
+
+  .book-card-title {
+    font-family: 'Fraunces', serif; font-weight: 500; font-size: 13.5px;
+    color: var(--chrome-text); line-height: 1.35;
+    display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden;
+    flex: 1;
+  }
+  .book-card-meta {
+    font-size: 11px; color: var(--chrome-text-dim); display: flex; flex-direction: column; gap: 4px;
+  }
+  .book-card-progress-bar {
+    height: 2px; background: rgba(180,138,79,0.2); border-radius: 1px; overflow: hidden;
+  }
+  .book-card-progress-fill {
+    height: 100%; background: linear-gradient(90deg, var(--moss), var(--brass-bright)); border-radius: 1px;
+    transition: width 0.4s ease;
+  }
+  .book-card-pct { color: var(--brass-bright); font-weight: 600; }
+  .book-card-cached {
+    position: absolute; top: 8px; right: 8px;
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--moss); box-shadow: 0 0 6px rgba(90,107,79,0.6);
+    title: "Saved on device";
+  }
+  .book-card-delete {
+    position: absolute; top: 6px; right: 6px;
+    background: rgba(0,0,0,0.45); border: none; color: rgba(236,227,207,0.5);
+    width: 24px; height: 24px; border-radius: 50%; font-size: 14px;
+    display: none; align-items: center; justify-content: center; cursor: pointer;
+    touch-action: manipulation;
+  }
+  .book-card.deleting .book-card-delete { display: flex; }
+  .book-card.deleting .book-card-cached { display: none; }
+  .book-card-delete:hover { color: #e87; background: rgba(200,60,60,0.4); }
+
+  #lib-empty {
+    display: none; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; flex: 1; padding: 40px 20px;
+  }
+  #lib-empty.show { display: flex; }
+  .lib-empty-icon { width: 64px; height: 64px; color: rgba(180,138,79,0.3); }
+  .lib-empty-icon svg { width: 100%; height: 100%; }
+  #lib-empty p { font-family: 'Fraunces', serif; font-size: 18px; color: var(--chrome-text-dim); margin: 0; }
+  #lib-empty span { font-size: 13px; color: rgba(236,227,207,0.35); }
+
+  /* drag-over highlight */
+  #library-screen.drag-over { outline: 2px dashed var(--brass-bright); outline-offset: -10px; }
 
   /* ---------- Book shell ---------- */
   #book {
@@ -312,20 +369,31 @@
 <body>
 <div id="app">
 
-  <div id="empty-state">
-    <div class="clasp">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.4"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 3v18M12 8h6M12 12h6M12 16h4"/></svg>
+  <div id="library-screen">
+    <div id="lib-header">
+      <h1 id="lib-title">Folio</h1>
+      <button id="lib-add-btn" title="Add a book">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 5v14M5 12h14"/></svg>
+        Add Book
+      </button>
     </div>
-    <h1>Folio</h1>
-    <p>Drop a PDF here, or click to choose one. It opens like a book — paginated, themed, and remembers exactly where you left off.</p>
-    <div class="hint">Click or drag a .pdf file</div>
-    <div id="library-list"></div>
+    <div id="lib-grid"></div>
+    <div id="lib-empty">
+      <div class="lib-empty-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="4" y="3" width="16" height="18" rx="1.5"/><path d="M8 3v18M12 8h6M12 12h6M12 16h4"/></svg>
+      </div>
+      <p>Your library is empty</p>
+      <span>Tap Add Book to get started</span>
+    </div>
   </div>
 
   <div id="book" hidden>
     <div id="chrome-top">
       <div class="chrome-btns">
-        <button class="icon-btn" id="btn-drawer" title="Contents &amp; library (T)">
+        <button class="icon-btn" id="btn-home" title="Library">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        </button>
+        <button class="icon-btn" id="btn-drawer" title="Contents (T)">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><path d="M4 6h16M4 12h10M4 18h16"/></svg>
         </button>
         <span id="book-title">—</span>
@@ -406,12 +474,13 @@
     </div>
 
     <div id="drawer">
-      <div class="drawer-section" style="max-height:34%;">
-        <h2>Library</h2>
-        <div id="library-list-drawer" style="padding:0 20px; display:flex; flex-direction:column; gap:4px;"></div>
+      <div style="padding: calc(env(safe-area-inset-top) + 16px) 20px 14px; display:flex; align-items:center; justify-content:space-between;">
+        <h2 style="margin:0;font-family:'Fraunces',serif;font-weight:500;font-size:13px;letter-spacing:0.08em;text-transform:uppercase;color:var(--brass);">Contents</h2>
+        <button class="icon-btn" id="btn-drawer-close" style="width:30px;height:30px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M6 6l12 12M18 6L6 18"/></svg>
+        </button>
       </div>
-      <h2 style="padding:0 20px;">Contents</h2>
-      <div id="toc-tree"></div>
+      <div id="toc-tree" style="flex:1;overflow-y:auto;padding:0 20px;"></div>
     </div>
   </div>
 
@@ -426,9 +495,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs
 
 const els = {
   app: document.getElementById('app'),
-  emptyState: document.getElementById('empty-state'),
-  libList: document.getElementById('library-list'),
-  libListDrawer: document.getElementById('library-list-drawer'),
+  libraryScreen: document.getElementById('library-screen'),
   book: document.getElementById('book'),
   fileInput: document.getElementById('file-input'),
   dropVeil: document.getElementById('drop-veil'),
@@ -451,6 +518,7 @@ const els = {
   tocTree: document.getElementById('toc-tree'),
   zoomPop: document.getElementById('zoom-pop'),
   zoomVal: document.getElementById('zoom-val'),
+  btnHome: document.getElementById('btn-home'),
   btnDrawer: document.getElementById('btn-drawer'),
   btnSpread: document.getElementById('btn-spread'),
   btnScroll: document.getElementById('btn-scroll'),
@@ -590,61 +658,120 @@ function showToast(msg) {
 }
 
 // ---------------- Library UI (empty state) ----------------
-async function renderLibraryLists() {
+async function renderLibraryScreen() {
   const list = await loadLibrary();
   const idbIds = new Set(await listIDBIds());
-  const build = (container) => {
-    container.innerHTML = '';
-    if (!list.length) {
-      if (container === els.libListDrawer) container.innerHTML = '<div style="font-size:12px;color:var(--chrome-text-dim);">No books yet.</div>';
-      return;
-    }
-    list.forEach(b => {
-      const btn = document.createElement('button');
-      const pct = Math.round((b.lastPage / Math.max(b.totalPages,1)) * 100);
-      const cached = idbIds.has(b.id);
-      btn.innerHTML = `<span>${escapeHtml(b.name)}</span><span class="pct">${cached ? '📖 ' : ''}${pct}%</span>`;
-      btn.title = cached ? 'Tap to reopen (saved on device)' : 'Tap to reopen (you\'ll need to select the file again)';
-      btn.onclick = async () => {
-        if (cached) {
-          const buf = await loadPdfFromIDB(b.id);
-          if (buf) { await openBuffer(buf, b.name + '.pdf', b.id); return; }
-        }
-        pendingReopenId = b.id; els.fileInput.click();
-      };
-      container.appendChild(btn);
+  const grid = document.getElementById('lib-grid');
+  const empty = document.getElementById('lib-empty');
+  grid.innerHTML = '';
+
+  if (!list.length) { empty.classList.add('show'); return; }
+  empty.classList.remove('show');
+
+  list.forEach(b => {
+    const pct = Math.round((b.lastPage / Math.max(b.totalPages, 1)) * 100);
+    const cached = idbIds.has(b.id);
+    const ago = timeAgo(b.lastOpened);
+
+    const card = document.createElement('div');
+    card.className = 'book-card';
+    card.innerHTML = `
+      ${cached ? '<div class="book-card-cached" title="Saved on device"></div>' : ''}
+      <button class="book-card-delete" title="Remove">✕</button>
+      <div class="book-card-title">${escapeHtml(b.name)}</div>
+      <div class="book-card-meta">
+        <div class="book-card-progress-bar"><div class="book-card-progress-fill" style="width:${pct}%"></div></div>
+        <div><span class="book-card-pct">${pct}%</span> · ${ago}</div>
+      </div>`;
+
+    // Open on tap
+    card.addEventListener('click', async (e) => {
+      if (e.target.closest('.book-card-delete')) return;
+      if (cached) {
+        const buf = await loadPdfFromIDB(b.id);
+        if (buf) { await openBuffer(buf, b.name + '.pdf', b.id); return; }
+      }
+      pendingReopenId = b.id;
+      els.fileInput.click();
     });
-  };
-  build(els.libList);
-  build(els.libListDrawer);
+
+    // Long-press to reveal delete
+    let pressTimer;
+    card.addEventListener('touchstart', () => { pressTimer = setTimeout(() => card.classList.add('deleting'), 600); }, { passive: true });
+    card.addEventListener('touchend', () => clearTimeout(pressTimer));
+    card.addEventListener('touchmove', () => clearTimeout(pressTimer), { passive: true });
+
+    // Delete button
+    card.querySelector('.book-card-delete').addEventListener('click', async (e) => {
+      e.stopPropagation();
+      await deleteFromIDB(b.id);
+      const lib = await loadLibrary();
+      const newLib = lib.filter(x => x.id !== b.id);
+      await saveLibrary(newLib);
+      localStorage.removeItem('folio:book:' + b.id);
+      card.style.transition = 'opacity 0.25s, transform 0.25s';
+      card.style.opacity = '0'; card.style.transform = 'scale(0.88)';
+      setTimeout(() => renderLibraryScreen(), 260);
+    });
+
+    grid.appendChild(card);
+  });
 }
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'just now';
+  if (m < 60) return m + 'm ago';
+  const h = Math.floor(m / 60);
+  if (h < 24) return h + 'h ago';
+  const d = Math.floor(h / 24);
+  if (d < 30) return d + 'd ago';
+  return Math.floor(d / 30) + 'mo ago';
+}
+
+// Keep old name as alias for drawer usage
+async function renderLibraryLists() { await renderLibraryScreen(); }
 function escapeHtml(s) { return s.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 let pendingReopenId = null;
 
 // ---------------- File opening ----------------
-els.emptyState.addEventListener('click', () => { pendingReopenId = null; els.fileInput.click(); });
+document.getElementById('lib-add-btn').addEventListener('click', () => { pendingReopenId = null; els.fileInput.click(); });
 els.btnOpen.addEventListener('click', () => { pendingReopenId = null; els.fileInput.click(); });
 els.fileInput.addEventListener('change', (e) => { if (e.target.files[0]) openFile(e.target.files[0]); });
 
-// Open from a raw ArrayBuffer (e.g. loaded from IndexedDB)
-async function openBuffer(buffer, fileName, knownId) {
-  const fakeFile = { name: fileName, size: buffer.byteLength, type: 'application/pdf', arrayBuffer: () => Promise.resolve(buffer) };
-  await openFile(fakeFile, knownId);
-}
+// Home button — go back to library
+els.btnHome.addEventListener('click', () => {
+  stopListening();
+  els.book.hidden = true;
+  els.libraryScreen.hidden = false;
+  renderLibraryScreen();
+});
 
+// Drawer close button
+document.getElementById('btn-drawer-close').addEventListener('click', () => els.drawer.classList.remove('open'));
+
+// Drag-drop on library screen
 ['dragenter','dragover'].forEach(ev => document.addEventListener(ev, e => {
   e.preventDefault();
-  if ([...e.dataTransfer.items].some(i => i.type === 'application/pdf')) els.dropVeil.classList.add('show');
+  if ([...e.dataTransfer.items].some(i => i.type === 'application/pdf'))
+    document.getElementById('library-screen').classList.add('drag-over');
 }));
 ['dragleave','drop'].forEach(ev => document.addEventListener(ev, e => {
   e.preventDefault();
-  els.dropVeil.classList.remove('show');
+  document.getElementById('library-screen').classList.remove('drag-over');
 }));
 document.addEventListener('drop', e => {
   const f = e.dataTransfer.files[0];
   if (f && f.type === 'application/pdf') { pendingReopenId = null; openFile(f); }
 });
+
+// Open from raw ArrayBuffer (IDB reopen)
+async function openBuffer(buffer, fileName, knownId) {
+  const fakeFile = { name: fileName, size: buffer.byteLength, type: 'application/pdf', arrayBuffer: () => Promise.resolve(buffer) };
+  await openFile(fakeFile, knownId);
+}
 
 async function openFile(file, knownId) {
   if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
@@ -679,7 +806,7 @@ async function openFile(file, knownId) {
       state.reflowWidth = saved.reflowWidth || state.reflowWidth;
     }
 
-    els.emptyState.style.display = 'none';
+    els.libraryScreen.hidden = true;
     els.book.hidden = false;
     els.bookTitle.textContent = state.fileName;
     document.documentElement.setAttribute('data-theme', state.theme);
@@ -1184,7 +1311,7 @@ if (isIOS && !document.fullscreenEnabled) {
     else document.exitFullscreen?.();
   });
 }
-els.btnDrawer.addEventListener('click', async () => { els.drawer.classList.toggle('open'); await renderLibraryLists(); });
+els.btnDrawer.addEventListener('click', () => els.drawer.classList.toggle('open'));
 document.addEventListener('click', (e) => {
   if (els.drawer.classList.contains('open') && !els.drawer.contains(e.target) && e.target !== els.btnDrawer && !els.btnDrawer.contains(e.target)) {
     els.drawer.classList.remove('open');
@@ -1292,19 +1419,13 @@ window.addEventListener('resize', () => {
 
 // ---------------- Init ----------------
 async function init() {
-  await renderLibraryLists();
-  // Auto-reopen the last book if it's cached in IDB
+  await renderLibraryScreen();
+  // Auto-reopen the last book if cached in IDB
   const lib = await loadLibrary();
   if (lib.length) {
     const last = lib[0];
     const buf = await loadPdfFromIDB(last.id);
-    if (buf) {
-      await openBuffer(buf, last.name + '.pdf', last.id);
-      return;
-    }
-    // IDB cache not found yet — show a nudge on the empty state
-    const hint = document.querySelector('#empty-state .hint');
-    if (hint) hint.textContent = 'Open "' + last.name + '" once to enable auto-open';
+    if (buf) { await openBuffer(buf, last.name + '.pdf', last.id); return; }
   }
 }
 init();
