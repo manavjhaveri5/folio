@@ -1532,6 +1532,7 @@ async function nPlay() {
   // Page exhausted → advance
   if (N.idx >= N.doms.length) {
     N.busy = false;
+    showToast(`Page ${N.page}: 0 usable paragraphs — skipping`);
     if (N.page < state.totalPages) {
       await nLoadPage(N.page + 1);
       if (mySeq !== N.seq) return;
@@ -1542,6 +1543,8 @@ async function nPlay() {
     }
     return;
   }
+
+  showToast(`Page ${N.page} · para ${N.idx + 1}/${N.doms.length} · fetching audio…`);
 
   // Highlight and scroll
   document.querySelectorAll('.reflow-page p.speaking').forEach(p => p.classList.remove('speaking'));
