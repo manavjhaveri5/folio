@@ -1506,7 +1506,7 @@ async function nPreload(idx) {
   const voice= localStorage.getItem('folio:openai-voice') || 'onyx';
   const mood = paragraphMoodInstruction(obj.text);
   const inst = [narratorProfile, mood].filter(Boolean).join('\n\n');
-  for (const model of ['gpt-4o-mini-tts','tts-1-hd','tts-1']) {
+  for (const model of ['tts-1','tts-1-hd','gpt-4o-mini-tts']) {
     const body = { model, input: obj.text.slice(0, 4096), voice };
     if (inst && model === 'gpt-4o-mini-tts') body.instructions = inst;
     try {
@@ -1575,7 +1575,7 @@ async function nPlay() {
       const voice= localStorage.getItem('folio:openai-voice') || 'onyx';
       const mood = paragraphMoodInstruction(text);
       const inst = [narratorProfile, mood].filter(Boolean).join('\n\n');
-      for (const model of ['gpt-4o-mini-tts','tts-1-hd','tts-1']) {
+      for (const model of ['tts-1','tts-1-hd','gpt-4o-mini-tts']) {
         const body = { model, input: text.slice(0, 4096), voice };
         if (inst && model === 'gpt-4o-mini-tts') body.instructions = inst;
         try {
@@ -1601,7 +1601,7 @@ async function nPlay() {
   audio.playbackRate = state.speechRate;
   audio.onended  = onEnd;
   audio.onerror  = onEnd;
-  audio.play().catch(onEnd);
+  audio.play().then(() => showToast('Playing ▶')).catch(onEnd);
   nSetIcon(true);
   N.busy = false;
 
@@ -1626,10 +1626,7 @@ async function nStart(pageNum) {
   if (!hasOpenAIKey()) { showToast('Add OpenAI key in Settings → AI Voice'); return; }
   if (state.mode !== 'reflow') { state.mode = 'reflow'; applyModeUI(); await renderReflowMode(); }
 
-  showToast('Connecting…');
-  if (!await verifyOpenAIKey()) { showToast('OpenAI key invalid — re-enter in Settings'); return; }
-
-  // Reset
+  // Reset — skip key verification, TTS will report 401 directly if invalid
   N.seq++;
   N.active = true;
   N.busy   = false;
@@ -1656,7 +1653,7 @@ async function nStart(pageNum) {
   }
 
   await nLoadPage(pageNum || state.currentPage);
-  if (N.active) await nPlay();
+  if (N.active) { showToast('Generating audio…'); await nPlay(); }
 }
 
 // ── Button wiring ─────────────────────────────────────────────
@@ -2455,7 +2452,7 @@ async function verifyOpenAIKey() {
 }
 
 // ── Core TTS fetch — tries gpt-4o-mini-tts first, falls back to tts-1-hd ──
-const TTS_MODELS = ['gpt-4o-mini-tts', 'tts-1-hd', 'tts-1'];
+const TTS_MODELS = ['tts-1', 'tts-1-hd', 'gpt-4o-mini-tts'];
 
 async function fetchOpenAIAudio(text, overrideInstructions) {
   const key = localStorage.getItem('folio:openai-key');
