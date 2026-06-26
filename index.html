@@ -721,7 +721,7 @@
       <div class="settings-section">
         <div class="settings-label">AI Voice (OpenAI)</div>
         <div class="settings-row">
-          <input id="set-openai-key" type="password" placeholder="sk-..." class="settings-input" autocomplete="off" />
+          <input id="set-openai-key" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="sk-..." class="settings-input" autocomplete="off" />
           <button id="set-openai-save" class="settings-btn">Save</button>
         </div>
         <select id="set-openai-voice" class="settings-select">
@@ -738,7 +738,7 @@
       <div class="settings-section">
         <div class="settings-label">Sync across devices (GitHub Gist)</div>
         <div class="settings-row">
-          <input id="set-gist-token" type="password" placeholder="ghp_... (gist scope only)" class="settings-input" autocomplete="off" />
+          <input id="set-gist-token" type="text" autocapitalize="none" autocorrect="off" spellcheck="false" placeholder="ghp_... (gist scope only)" class="settings-input" autocomplete="off" />
           <button id="set-gist-save" class="settings-btn">Save</button>
         </div>
         <div id="set-gist-id-row" class="settings-row" style="display:none">
@@ -2024,7 +2024,8 @@ window.addEventListener('resize', () => {
 });
 
 // ---------------- URL hash key setup ----------------
-// Visit #key=sk-... to auto-save OpenAI key without putting it in source
+// Visit #key=sk-... to auto-save OpenAI key
+let _pendingKeyToast = false;
 (function() {
   const hash = location.hash;
   if (hash.startsWith('#key=')) {
@@ -2032,9 +2033,8 @@ window.addEventListener('resize', () => {
     if (key.startsWith('sk-')) {
       localStorage.setItem('folio:openai-key', key);
       if (!localStorage.getItem('folio:openai-voice')) localStorage.setItem('folio:openai-voice', 'onyx');
-      history.replaceState(null, '', location.pathname);
-      // Show confirmation after app loads
-      window.addEventListener('load', () => setTimeout(() => showToast('OpenAI voice ready ✓'), 800));
+      history.replaceState(null, '', location.pathname + location.search);
+      _pendingKeyToast = true;
     }
   }
 })();
@@ -2198,12 +2198,14 @@ document.getElementById('lib-update-btn').addEventListener('click', async () => 
 
 document.getElementById('lib-settings-btn').addEventListener('click', () => {
   settingsModal.hidden = false;
-  // Load stored values
   const oKey = localStorage.getItem('folio:openai-key') || '';
-  document.getElementById('set-openai-key').value = oKey ? '••••••••' : '';
+  const inp = document.getElementById('set-openai-key');
+  inp.value = '';
+  inp.placeholder = oKey ? '✓ Key saved — paste new one to replace' : 'Paste your sk-proj-... key here';
   document.getElementById('set-openai-voice').value = localStorage.getItem('folio:openai-voice') || 'onyx';
   const gToken = localStorage.getItem('folio:gist-token') || '';
-  document.getElementById('set-gist-token').value = gToken ? '••••••••' : '';
+  document.getElementById('set-gist-token').value = '';
+  document.getElementById('set-gist-token').placeholder = gToken ? '✓ Token saved' : 'ghp_... (gist scope only)';
   const gId = localStorage.getItem('folio:gist-id') || '';
   document.getElementById('set-gist-id').value = gId;
   document.getElementById('set-gist-id-row').style.display = gToken ? 'flex' : 'none';
@@ -2212,11 +2214,20 @@ document.getElementById('lib-settings-btn').addEventListener('click', () => {
 document.getElementById('settings-close').addEventListener('click', () => settingsModal.hidden = true);
 settingsModal.addEventListener('click', e => { if (e.target === settingsModal) settingsModal.hidden = true; });
 
-document.getElementById('set-openai-save').addEventListener('click', () => {
+document.getElementById('set-openai-save').addEventListener('click', (e) => {
+  e.stopPropagation();
   const val = document.getElementById('set-openai-key').value.trim();
-  if (val && !val.startsWith('•')) localStorage.setItem('folio:openai-key', val);
+  if (val && val.startsWith('sk-')) {
+    localStorage.setItem('folio:openai-key', val);
+    document.getElementById('set-openai-key').value = '';
+    document.getElementById('set-openai-key').placeholder = '✓ Key saved!';
+    showToast('OpenAI key saved ✓ — voice is ready');
+  } else if (val) {
+    showToast('Key should start with sk- — check and try again');
+    return;
+  }
   localStorage.setItem('folio:openai-voice', document.getElementById('set-openai-voice').value);
-  showToast('OpenAI voice settings saved');
+  if (!val) showToast('Voice preference saved');
 });
 document.getElementById('set-openai-voice').addEventListener('change', () => {
   localStorage.setItem('folio:openai-voice', document.getElementById('set-openai-voice').value);
@@ -2494,6 +2505,7 @@ async function init() {
   if (!localStorage.getItem('folio:openai-voice')) localStorage.setItem('folio:openai-voice', 'onyx');
   await renderLibraryScreen();
   refreshStatsUI();
+  if (_pendingKeyToast) setTimeout(() => showToast('OpenAI key saved ✓ — voice is ready'), 400);
   await gistPull();
   refreshStatsUI();
   const lib = await loadLibrary();
