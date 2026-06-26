@@ -1586,10 +1586,21 @@ async function nPlay() {
           if (res.ok) {
             const blob = await res.blob();
             if (blob.size > 100) return new Audio(URL.createObjectURL(blob));
-          } else if (res.status === 401) { showToast('OpenAI key rejected'); nStop(); return null; }
-          else if (res.status === 429) { await new Promise(r => setTimeout(r, 2000)); }
-        } catch(e) { console.warn('TTS fetch error', e); }
+            else showToast('TTS returned empty audio — retrying…');
+          } else {
+            const errText = await res.text().catch(() => '');
+            console.warn('TTS', model, res.status, errText.slice(0, 200));
+            if (res.status === 401) { showToast('OpenAI key rejected (401) — re-save in Settings'); nStop(); return null; }
+            if (res.status === 403) { showToast('Key lacks audio permissions (403) — check OpenAI project settings'); nStop(); return null; }
+            if (res.status === 429) { showToast('Rate limited — waiting…'); await new Promise(r => setTimeout(r, 3000)); }
+            if (res.status >= 400 && res.status < 500 && res.status !== 429) {
+              showToast('TTS error ' + res.status + ' — ' + errText.slice(0, 60));
+              nStop(); return null;
+            }
+          }
+        } catch(e) { showToast('Network error: ' + e.message.slice(0, 60)); console.warn('TTS fetch error', e); }
       }
+      showToast('All TTS models failed — check console for details');
       return null;
     })();
     if (mySeq !== N.seq) return; // cancelled while fetching
