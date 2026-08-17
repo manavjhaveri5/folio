@@ -1443,8 +1443,7 @@ async function renderScrollMode() {
             en.target.dataset.rendered = '1';
           });
         }
-        state.currentPage = p;
-        updateProgressUI();
+        if (!scrollContainerLocked) { state.currentPage = p; updateProgressUI(); }
       }
     });
   }, { root: els.scrollContainer, threshold: 0.5 });
@@ -1472,9 +1471,13 @@ async function renderReflowMode() {
     els.reflowContainer.appendChild(wrap);
   }
 
-  // Scroll to saved page first, then start observing
+  // Scroll to saved page — lock observer briefly so scroll animation
+  // doesn't trigger it and overwrite currentPage
   const startTarget = els.reflowContainer.children[state.currentPage - 1];
   if (startTarget) startTarget.scrollIntoView();
+
+  let scrollLocked = true;
+  setTimeout(() => { scrollLocked = false; }, 800); // unlock after scroll settles
 
   // Use reflowContainer as root for accurate iOS scroll detection
   const observer = new IntersectionObserver(entries => {
@@ -1487,6 +1490,8 @@ async function renderReflowMode() {
             ? paras.map(t => `<p>${escapeHtml(t)}</p>`).join('')
             : '<p class="reflow-empty">No selectable text on this page — switch to Page view to see it as an image.</p>';
         });
+      }
+      if (en.isIntersecting && !scrollLocked) {
         state.currentPage = p;
         updateProgressUI();
       }
@@ -1927,25 +1932,41 @@ function applyModeUI() {
 }
 
 els.btnSpread.addEventListener('click', () => {
+  const savedPage = state.currentPage;
   if (state.mode !== 'page') { state.mode = 'page'; }
   state.spreadOn = !state.spreadOn;
+  state.currentPage = savedPage;
   applyModeUI(); renderCurrent();
 });
 els.btnScroll.addEventListener('click', () => {
+  const savedPage = state.currentPage;
   state.mode = state.mode === 'scroll' ? 'page' : 'scroll';
+  state.currentPage = savedPage;
   applyModeUI();
   if (state.mode === 'scroll') { els.scrollContainer.dataset.built = ''; renderScrollMode(); }
   else renderCurrent();
   saveProgress();
 });
 els.btnReflow.addEventListener('click', () => {
+  const savedPage = state.currentPage;
   state.mode = state.mode === 'reflow' ? 'page' : 'reflow';
+  state.currentPage = savedPage;
   applyModeUI();
   if (state.mode === 'reflow') { els.reflowContainer.dataset.built = ''; renderReflowMode(); }
   else renderCurrent();
   revealChromeBriefly();
   saveProgress();
 });
+
+// Tap page indicator → go to page prompt
+document.getElementById('page-indicator').addEventListener('click', () => {
+  const input = prompt(`Go to page (1–${state.totalPages}):`, state.currentPage);
+  if (!input) return;
+  const page = parseInt(input);
+  if (page >= 1 && page <= state.totalPages) goToPage(page, true);
+  else showToast(`Enter a page between 1 and ${state.totalPages}`);
+});
+document.getElementById('page-indicator').style.cursor = 'pointer';
 els.btnTheme.addEventListener('click', () => {
   const i = (THEMES.indexOf(state.theme) + 1) % THEMES.length;
   state.theme = THEMES[i];
