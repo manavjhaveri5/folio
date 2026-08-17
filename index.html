@@ -662,6 +662,32 @@
   }
   #toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
+  /* Resume banner */
+  #resume-banner {
+    position: absolute; bottom: calc(92px + env(safe-area-inset-bottom)); left: 50%;
+    transform: translateX(-50%);
+    background: rgba(12,11,8,0.96); backdrop-filter: blur(24px);
+    border: 1px solid rgba(200,165,106,0.3); border-radius: var(--r-pill);
+    padding: 10px 14px; display: flex; align-items: center; gap: 10px;
+    z-index: 55; white-space: nowrap;
+    box-shadow: 0 12px 40px rgba(0,0,0,0.5);
+    animation: listenIn 0.35s var(--spring) both;
+  }
+  #resume-banner span { font-size: 13.5px; color: var(--text-2); }
+  #resume-banner b { color: var(--gold-bright); }
+  .resume-btn-yes {
+    background: var(--gold); color: #0d0b06; border: none;
+    border-radius: 20px; padding: 7px 16px; font-size: 13px; font-weight: 700;
+    cursor: pointer; touch-action: manipulation;
+    transition: transform 0.1s var(--spring);
+  }
+  .resume-btn-yes:active { transform: scale(0.94); }
+  .resume-btn-no {
+    background: transparent; color: var(--text-3); border: 1px solid rgba(242,232,210,0.15);
+    border-radius: 20px; padding: 7px 12px; font-size: 13px;
+    cursor: pointer; touch-action: manipulation;
+  }
+
   /* ══════════════════════════════════════
      RESPONSIVE
      ══════════════════════════════════════ */
@@ -1255,6 +1281,19 @@ async function openFile(file, knownId) {
     await upsertLibraryEntry({ id, name: state.fileName, totalPages: state.totalPages, lastPage: state.currentPage, lastOpened: Date.now() });
     revealChromeBriefly();
     showToast(saved ? 'Welcome back — resumed where you left off.' : 'Opened ' + state.fileName);
+
+    // Check Gist for saved position on other devices
+    if (!saved) {
+      gistPull().then(() => {
+        const remote = localStorage.getItem('folio:book:' + state.bookId);
+        if (remote) {
+          const prog = JSON.parse(remote);
+          if (prog.page && prog.page > 1) {
+            setTimeout(() => showResumeBanner(prog.page, 'synced from another device'), 600);
+          }
+        }
+      });
+    }
     // Save PDF binary so it auto-opens next session
     savePdfToIDB(id, buf).then(async ok => {
       if (ok) {
@@ -1966,11 +2005,33 @@ document.getElementById('zoom-fit-page').addEventListener('click', () => {
 });
 
 // ---------------- Progress thread interaction ----------------
-els.progressThread.addEventListener('click', (e) => {
+function scrubToPosition(clientX) {
   const rect = els.progressThread.getBoundingClientRect();
-  const pct = (e.clientX - rect.left) / rect.width;
-  goToPage(Math.round(pct * state.totalPages), true);
+  const pct = Math.max(0, Math.min(1, (clientX - rect.left) / rect.width));
+  const page = Math.max(1, Math.round(pct * state.totalPages));
+  // Update handle visually during drag
+  els.progressFill.style.width = (pct * 100) + '%';
+  els.progressHandle.style.left = (pct * 100) + '%';
+  els.piCurrent.textContent = page;
+  return page;
+}
+els.progressThread.addEventListener('click', (e) => {
+  const page = scrubToPosition(e.clientX);
+  goToPage(page, true);
 });
+els.progressThread.addEventListener('touchstart', (e) => {
+  e.preventDefault();
+  scrubToPosition(e.touches[0].clientX);
+}, { passive: false });
+els.progressThread.addEventListener('touchmove', (e) => {
+  e.preventDefault();
+  scrubToPosition(e.touches[0].clientX);
+}, { passive: false });
+els.progressThread.addEventListener('touchend', (e) => {
+  e.preventDefault();
+  const page = scrubToPosition(e.changedTouches[0].clientX);
+  goToPage(page, true);
+}, { passive: false });
 
 // ---------------- Page-turn click zones + swipe ----------------
 document.getElementById('page-viewport').addEventListener('click', (e) => {
@@ -2011,6 +2072,22 @@ document.addEventListener('keydown', (e) => {
 
 // ---------------- Chrome auto-hide ----------------
 let chromeTimer = null;
+function showResumeBanner(page, source) {
+  const existing = document.getElementById('resume-banner');
+  if (existing) existing.remove();
+  const banner = document.createElement('div');
+  banner.id = 'resume-banner';
+  banner.innerHTML = `
+    <span>Resume from <b>page ${page}</b>${source ? ' · ' + source : ''}?</span>
+    <button class="resume-btn-yes">Resume</button>
+    <button class="resume-btn-no">Stay here</button>`;
+  document.getElementById('app').appendChild(banner);
+  const dismiss = () => banner.remove();
+  banner.querySelector('.resume-btn-yes').addEventListener('click', () => { goToPage(page, false); dismiss(); });
+  banner.querySelector('.resume-btn-no').addEventListener('click', dismiss);
+  setTimeout(dismiss, 10000);
+}
+
 function revealChromeBriefly() {
   els.app.classList.add('chrome-visible');
   clearTimeout(chromeTimer);
