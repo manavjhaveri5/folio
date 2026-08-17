@@ -1148,7 +1148,8 @@ async function renderLibraryScreen() {
 
     const card = document.createElement('div');
     card.className = 'book-card';
-    card.style.animationDelay = (idx * 0.05) + 's';
+    card.style.animationDelay = (idx * 0.04) + 's';
+    card.style.animationDuration = '0.35s';
     card.innerHTML = `
       ${cached ? '<div class="book-card-cached-dot"></div>' : ''}
       <button class="book-card-delete-btn">✕</button>
@@ -1293,8 +1294,11 @@ async function openFile(file, knownId) {
     await buildToc();
     await renderCurrent();
     await upsertLibraryEntry({ id, name: state.fileName, totalPages: state.totalPages, lastPage: state.currentPage, lastOpened: Date.now() });
-    revealChromeBriefly();
-    showToast(saved ? 'Welcome back — resumed where you left off.' : 'Opened ' + state.fileName);
+    // Show chrome for longer on first open so user sees controls
+    els.app.classList.add('chrome-visible');
+    clearTimeout(chromeTimer);
+    chromeTimer = setTimeout(() => { if (state.mode === 'page') els.app.classList.remove('chrome-visible'); }, 4000);
+    showToast(saved ? 'Resumed page ' + state.currentPage : 'Opened — tap edges to turn pages');
 
     // Check Gist for saved position on other devices
     if (!saved) {
@@ -1353,8 +1357,10 @@ async function renderToCanvas(canvas, pageNum, scaleOverride) {
 }
 
 async function renderCurrent() {
-  if (!state.pdfDoc || state.rendering) return;
+  if (!state.pdfDoc) return;
+  if (state.rendering) { state.renderPending = true; return; }
   state.rendering = true;
+  state.renderPending = false;
   if (state.mode === 'page') {
     els.spread.classList.toggle('single-mode', !state.spreadOn);
     await renderToCanvas(els.canvasLeft, state.currentPage);
@@ -1583,6 +1589,9 @@ async function nPlay() {
   if (!N.active || N.busy) return;
   N.busy = true;
   const mySeq = N.seq;
+  try { await _nPlayInner(mySeq); } catch(e) { console.error('nPlay error', e); N.busy = false; }
+}
+async function _nPlayInner(mySeq) {
 
   // Skip short/empty paragraphs
   while (N.idx < N.doms.length && (N.texts[N.idx]?.text || '').trim().length < 15) N.idx++;
@@ -1686,9 +1695,19 @@ async function nLoadPage(pageNum) {
   goToPage(pageNum, false);
   const wrap = await ensureReflowPageRendered(pageNum);
   if (!wrap) return;
+  // Wait for lazy-render if skeleton is still showing
+  if (wrap.querySelector('.reflow-skeleton') || !wrap.dataset.rendered) {
+    const paras = await extractParagraphs(pageNum);
+    wrap.dataset.rendered = '1';
+    wrap.innerHTML = paras.length
+      ? '<div class="reflow-page-num">' + pageNum + '</div>' + paras.map(t => '<p>' + escapeHtml(t) + '</p>').join('')
+      : '<p class="reflow-empty">No selectable text on this page.</p>';
+  }
   N.page  = pageNum;
   N.idx   = 0;
-  N.doms  = [...wrap.querySelectorAll('p')].filter(p => !p.classList.contains('reflow-empty'));
+  N.doms  = [...wrap.querySelectorAll('p')].filter(p =>
+    !p.classList.contains('reflow-empty') && p.textContent.trim().length >= 15
+  );
   N.texts = N.doms.map(p => ({ text: p.textContent.trim() }));
 }
 
@@ -1862,6 +1881,7 @@ async function goToPage(num, animate) {
     const target = container.children[num - 1];
     if (target) target.scrollIntoView({ behavior: 'smooth' });
     updateProgressUI();
+    saveProgress();
     return;
   }
 
@@ -2055,6 +2075,7 @@ els.progressThread.addEventListener('click', (e) => {
 });
 els.progressThread.addEventListener('touchstart', (e) => {
   e.preventDefault();
+  revealChromeBriefly();
   scrubToPosition(e.touches[0].clientX);
 }, { passive: false });
 els.progressThread.addEventListener('touchmove', (e) => {
@@ -2090,6 +2111,13 @@ document.addEventListener('touchend', e => {
 
 // ---------------- Keyboard ----------------
 document.addEventListener('keydown', (e) => {
+  // Close any open picker/modal on Escape
+  if (e.key === 'Escape') {
+    const picker = document.getElementById('narration-picker');
+    if (picker) { picker.remove(); return; }
+    if (!document.getElementById('settings-modal').hidden) { document.getElementById('settings-modal').hidden = true; return; }
+    if (!document.getElementById('export-modal').hidden) { exportAborted = true; document.getElementById('export-modal').hidden = true; return; }
+  }
   if (!state.pdfDoc) return;
   switch (e.key) {
     case 'ArrowRight': case 'PageDown': nextPage(); e.preventDefault(); break;
@@ -2634,7 +2662,14 @@ async function init() {
   if (lib.length) {
     const last = lib[0];
     const buf = await loadPdfFromIDB(last.id);
-    if (buf) { await openBuffer(buf, last.name + '.pdf', last.id); return; }
+    if (buf) {
+      const saved = await loadProgress(last.id);
+      if (saved && saved.page > 1) {
+        setTimeout(() => showToast(`Resuming page ${saved.page} of ${last.totalPages}`), 1200);
+      }
+      await openBuffer(buf, last.name + '.pdf', last.id);
+      return;
+    }
   }
 }
 init();
